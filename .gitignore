@@ -1,0 +1,14 @@
+node_modules/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.local
+uploads/
+tmp/
+.DS_Store
+*.log
+server/data/
+server/uploads/
+.claude/

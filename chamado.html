@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#533C9D" />
+<title>Abrir chamado · Lavandery</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="styles.css"/>
+<script>
+ tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui','sans-serif'] } } } };
+</script>
+<style>
+  .suggestion { cursor:pointer; padding:10px 14px; border-radius:10px; border:1px solid #F1F2F4; }
+  .suggestion:hover { background:#F0EDF9; border-color:#E0DBF1; }
+  .suggestion + .suggestion { margin-top: 6px; }
+  .confirm-card { background:#F0EDF9; border:1px solid #E0DBF1; border-radius:14px; padding:14px 16px; }
+</style>
+</head>
+<body class="bg-white text-gray-900 font-sans min-h-screen">
+
+<header class="topbar safe-top px-6 py-4 flex items-center justify-between">
+  <img src="/logo.svg" alt="Lavandery" style="height:30px;width:auto" />
+  <div class="text-xs text-gray-500">Central de chamados</div>
+</header>
+
+<main class="max-w-lg mx-auto px-6 py-8">
+
+  <!-- Mode 1: condo locked via ?c=<slug> -->
+  <section id="lockedScreen" class="hidden">
+    <h1 class="text-2xl font-bold tracking-tight">Abrir chamado</h1>
+    <p class="text-sm text-gray-500 mt-1 mb-5">Relate um problema da sua lavanderia. Resposta em até 24h úteis.</p>
+    <div class="confirm-card mb-6">
+      <div class="text-xs uppercase tracking-widest text-brand" style="color:#533C9D">Condomínio</div>
+      <div id="lockedName" class="font-semibold text-lg mt-0.5"></div>
+      <div id="lockedAddr" class="text-sm text-gray-600"></div>
+    </div>
+    <form id="form" class="space-y-4"></form>
+  </section>
+
+  <!-- Mode 2: no param → smart search for condo -->
+  <section id="searchScreen">
+    <h1 class="text-2xl font-bold tracking-tight">Encontre seu condomínio</h1>
+    <p class="text-sm text-gray-500 mt-1 mb-5">Digite o nome, endereço ou CEP. Mostramos só as correspondências.</p>
+    <input id="searchBox" class="input" autocomplete="off" placeholder="Ex: Max Carneiros ou Rua São José ou 55578-000"/>
+    <p id="searchHint" class="kbd mt-2">Mínimo 3 caracteres. Quanto mais preciso, melhor.</p>
+    <div id="suggestions" class="mt-4 space-y-2"></div>
+  </section>
+
+  <!-- Success -->
+  <section id="success" class="hidden text-center py-16">
+    <div class="w-14 h-14 rounded-full bg-green-50 text-green-600 mx-auto mb-6 grid place-items-center">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h2 class="text-xl font-bold tracking-tight">Chamado aberto!</h2>
+    <p class="step-sub mt-2">Protocolo: <b id="protocol" class="kbd"></b></p>
+    <p class="step-sub mt-4">Você receberá um e-mail quando a equipe técnica começar o atendimento.</p>
+    <button id="newOne" class="btn btn-ghost mt-8">Abrir outro chamado</button>
+  </section>
+</main>
+
+<script>
+const params = new URLSearchParams(location.search);
+const slug = params.get('c');   // ?c=<slug>
+let currentCondo = null;
+
+function formHtml() {
+  return `
+    <div>
+      <label class="label">Título do problema</label>
+      <input id="title" class="input" placeholder="Ex: Máquina LVD-002 sem resposta" required maxlength="120"/>
+    </div>
+    <div>
+      <label class="label">Descrição</label>
+      <textarea id="desc" class="textarea" rows="4" placeholder="O que está acontecendo? Há quanto tempo?"></textarea>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="label">Categoria</label>
+        <select id="cat" class="select">
+          <option value="maquina">Máquina</option>
+          <option value="infraestrutura">Infraestrutura</option>
+          <option value="insumos">Insumos</option>
+          <option value="outro">Outro</option>
+        </select>
+      </div>
+      <div>
+        <label class="label">Prioridade</label>
+        <select id="prio" class="select">
+          <option value="baixa">Baixa</option>
+          <option value="media" selected>Média</option>
+          <option value="alta">Alta</option>
+          <option value="urgente">Urgente</option>
+        </select>
+      </div>
+    </div>
+    <div class="hairline my-2"></div>
+    <div>
+      <label class="label">Seu nome</label>
+      <input id="name" class="input" placeholder="Nome do síndico/zelador/morador" required/>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="label">E-mail</label>
+        <input id="email" type="email" class="input" placeholder="voce@email.com" required/>
+      </div>
+      <div>
+        <label class="label">Telefone</label>
+        <input id="phone" class="input" placeholder="(11) 9..." />
+      </div>
+    </div>
+    <button class="btn btn-primary" type="submit">Enviar chamado</button>`;
+}
+
+async function submitForm(e) {
+  e.preventDefault();
+  if (!currentCondo) return;
+  const body = {
+    condo_id: currentCondo.id,
+    title: document.querySelector('#title').value,
+    description: document.querySelector('#desc').value,
+    category: document.querySelector('#cat').value,
+    priority: document.querySelector('#prio').value,
+    opened_by_name: document.querySelector('#name').value,
+    opened_by_email: document.querySelector('#email').value,
+    opened_by_phone: document.querySelector('#phone').value,
+  };
+  const r = await fetch('/api/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (r.ok) {
+    document.querySelector('#lockedScreen').classList.add('hidden');
+    document.querySelector('#searchScreen').classList.add('hidden');
+    document.querySelector('#success').classList.remove('hidden');
+    document.querySelector('#protocol').textContent = data.id;
+  } else {
+    alert('Erro: ' + (data.detail || data.error));
+  }
+}
+
+// --- MODE 1: locked by slug ---
+async function bootLocked() {
+  const r = await fetch('/api/public/condominium/' + encodeURIComponent(slug));
+  if (!r.ok) {
+    document.querySelector('#lockedScreen').innerHTML = `
+      <h1 class="text-xl font-bold">Link inválido</h1>
+      <p class="step-sub mt-2">Esse link não corresponde a nenhum condomínio. <a href="/chamado.html" class="underline">Buscar outro</a>.</p>`;
+    document.querySelector('#lockedScreen').classList.remove('hidden');
+    return;
+  }
+  currentCondo = await r.json();
+  document.querySelector('#lockedName').textContent = currentCondo.name;
+  document.querySelector('#lockedAddr').textContent = [currentCondo.address, currentCondo.city].filter(Boolean).join(' · ');
+  document.querySelector('#form').innerHTML = formHtml();
+  document.querySelector('#form').addEventListener('submit', submitForm);
+  document.querySelector('#lockedScreen').classList.remove('hidden');
+  document.querySelector('#searchScreen').classList.add('hidden');
+}
+
+// --- MODE 2: search ---
+let _t;
+document.querySelector('#searchBox').addEventListener('input', (e) => {
+  clearTimeout(_t);
+  const q = e.target.value.trim();
+  const host = document.querySelector('#suggestions');
+  const hint = document.querySelector('#searchHint');
+  if (q.length < 3) { host.innerHTML=''; hint.textContent='Mínimo 3 caracteres. Quanto mais preciso, melhor.'; return; }
+  hint.textContent = 'Procurando...';
+  _t = setTimeout(async () => {
+    const r = await fetch('/api/public/condominium/search?q=' + encodeURIComponent(q));
+    const { results } = await r.json();
+    if (!results.length) { host.innerHTML=''; hint.textContent='Nenhum resultado — tente outro trecho do nome ou endereço.'; return; }
+    hint.textContent = `${results.length} resultado(s). Toque pra confirmar.`;
+    host.innerHTML = results.map(r => `
+      <div class="suggestion" data-id="${r.id}" data-slug="${r.slug||''}">
+        <div class="font-medium">${esc(r.name)}</div>
+        <div class="text-xs text-gray-500">${esc([r.address,r.city,r.cep].filter(Boolean).join(' · '))}</div>
+      </div>`).join('');
+    host.querySelectorAll('.suggestion').forEach(s => s.addEventListener('click', () => {
+      // "lock" into this condo by reloading with slug — clean URL
+      if (s.dataset.slug) location.href = '/chamado.html?c=' + encodeURIComponent(s.dataset.slug);
+      else confirmCondo({ id: s.dataset.id, name: s.querySelector('.font-medium').textContent });
+    }));
+  }, 280);
+});
+function esc(s){ return (s||'').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+document.querySelector('#newOne')?.addEventListener('click', () => location.reload());
+
+if (slug) bootLocked(); else { /* search mode is default */ }
+</script>
+</body>
+</html>

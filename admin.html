@@ -1,0 +1,3187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lavandery — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="design.css" />
+<script>
+ tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui','sans-serif'] }, colors: { brand:'#533C9D', success:'#16A34A', danger:'#DC2626' } } } }
+</script>
+</head>
+<body>
+
+<div class="app-shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <img src="/logo.svg" alt="Lavandery" />
+    </div>
+    <div class="sidebar-section">Operação</div>
+    <a href="#" data-tab="dash" class="tab nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+      Dashboard
+    </a>
+    <a href="#" data-tab="calendar" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Agenda Geral
+    </a>
+    <a href="#" data-tab="schedule" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Manutenções Preventivas
+    </a>
+    <a href="#" data-tab="map" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+      Mapa & Rota
+    </a>
+    <a href="#" data-tab="supplies" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4l1 4h-6l1-4z"/><path d="M6 6h12l-1 14H7L6 6z"/></svg>
+      Insumos
+    </a>
+    <a href="#" data-tab="history" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><polyline points="7 14 11 10 15 12 21 6"/></svg>
+      Histórico
+    </a>
+    <a href="#" data-tab="tickets" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      Chamados <span class="badge" id="sidebarTicketsBadge" style="display:none"></span>
+    </a>
+
+    <a href="#" data-tab="implantations" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Implantações <span class="badge" id="sidebarImplBadge" style="display:none"></span>
+    </a>
+    <a href="#" data-tab="deliveries" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      Entrega de Equipamentos
+    </a>
+
+    <div class="sidebar-section">Cadastro</div>
+    <a href="#" data-tab="condos" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1M9 13h1M9 17h1M14 9h1M14 13h1M14 17h1"/></svg>
+      Condomínios
+    </a>
+    <a href="#" data-tab="import" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Importar Autentique
+    </a>
+
+    <div class="sidebar-section">Sistema</div>
+    <a href="#" data-tab="integrations" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg>
+      Integrações
+    </a>
+    <a href="/index.html" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      App do Técnico
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="user-chip" id="userChip">
+        <div class="avatar" id="userAvatar">—</div>
+        <div style="flex:1;min-width:0">
+          <div id="userName" style="font-size:13px;font-weight:500;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</div>
+          <div id="userRole" style="font-size:11px;color:var(--ink-400)">—</div>
+        </div>
+        <button id="logoutBtn" title="Sair" style="background:none;border:none;padding:6px;cursor:pointer;color:var(--ink-400);border-radius:6px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main column -->
+  <div>
+    <header class="topbar-new">
+      <div class="breadcrumb"><b id="crumbTitle">Dashboard</b></div>
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="globalSearch" placeholder="Busca rápida: condomínios, chamados, visitas..."/>
+        <span class="kbd-hint">⌘K</span>
+      </div>
+      <div class="topbar-actions">
+        <div id="bellWrap" style="position:relative">
+          <button id="bellBtn" class="btn-new ghost sm" style="width:38px;padding:0" title="Alertas">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span id="bellBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;min-width:18px;height:18px;border-radius:999px;font-size:10px;font-weight:700;display:grid;place-items:center;padding:0 4px;box-shadow:0 0 0 2px #fff">0</span>
+          </button>
+          <div id="alertsPanel" style="display:none;position:absolute;right:0;top:44px;width:380px;max-height:70vh;background:#fff;border:1px solid var(--ink-200);border-radius:14px;box-shadow:var(--shadow-xl);overflow:hidden;z-index:60">
+            <div style="padding:14px 16px;border-bottom:1px solid var(--ink-200);display:flex;justify-content:space-between;align-items:center">
+              <div><div style="font-weight:600;font-size:14px">Alertas</div><div id="alertsSummary" style="font-size:11px;color:var(--ink-500);margin-top:2px"></div></div>
+              <button id="alertsRefresh" class="btn-new ghost sm" style="height:28px;padding:0 10px">↻</button>
+            </div>
+            <div id="alertsList" style="max-height:calc(70vh - 60px);overflow-y:auto"></div>
+          </div>
+        </div>
+        <button id="newTicketGlobal" class="btn-new ghost sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Novo
+        </button>
+      </div>
+    </header>
+
+<main class="page enter" id="dashMain">
+  <section class="hero-banner">
+    <div style="position:relative;z-index:1">
+      <div id="heroGreeting" style="font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.8);margin-bottom:6px">Bem-vindo</div>
+      <h1 style="font-size:32px;margin-bottom:4px" id="heroName">Painel Lavandery</h1>
+      <p id="dashSubtitle">Carregando a operação...</p>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button id="refreshDash" class="btn-new" style="background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(8px)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Atualizar
+        </button>
+        <button onclick="showTab('schedule')" class="btn-new" style="background:#fff;color:var(--brand-700)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Ver agenda
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid-cards stagger" id="kpis" style="margin-bottom:24px"></section>
+
+  <section class="stagger" style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card-new">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Visitas por mês <span class="muted" style="font-weight:400;font-size:12px" id="visitsYearLabel"></span></div>
+          <div class="subtle" style="font-size:12px;margin-top:2px" id="visitsTotal"></div>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="chartVisits"></canvas></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Carga por técnico</div></div>
+      <div class="chart-box sm"><canvas id="chartTech"></canvas></div>
+      <div id="techLegend" style="margin-top:12px;font-size:13px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </section>
+
+  <section class="stagger" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card-new">
+      <div class="card-header">
+        <div class="card-title">Insumos</div>
+        <a href="#" onclick="showTab('supplies');return false" class="card-action">Ver tudo →</a>
+      </div>
+      <div class="chart-box sm"><canvas id="chartSupplies"></canvas></div>
+      <div id="suppliesLegend" style="margin-top:12px;font-size:13px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header">
+        <div class="card-title">Chamados</div>
+        <a href="#" onclick="showTab('tickets');return false" class="card-action">Ver tudo →</a>
+      </div>
+      <div class="chart-box sm"><canvas id="chartTickets"></canvas></div>
+      <div id="ticketsLegend" style="margin-top:12px;font-size:13px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Cidades</div></div>
+      <div id="citiesList" style="display:flex;flex-direction:column;gap:10px;font-size:13px"></div>
+    </div>
+  </section>
+
+  <section class="stagger" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card-new">
+      <div class="card-header">
+        <div class="card-title">Próximas 7 visitas</div>
+        <a href="#" onclick="showTab('schedule');return false" class="card-action">Agenda →</a>
+      </div>
+      <div id="nextVisits" style="font-size:13px;display:flex;flex-direction:column;gap:0"></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Atividade recente</div></div>
+      <div id="activityFeed" style="font-size:13px;display:flex;flex-direction:column;gap:0"></div>
+    </div>
+  </section>
+</main>
+
+<main class="max-w-6xl mx-auto px-6 py-6 hidden" id="condosMain">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Condomínios</h1>
+      <p class="text-sm text-gray-500">Clique numa linha para abrir o painel com todos os campos editáveis, máquinas, visitas, entregas e chamados.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <input id="condoSearch" class="input" placeholder="Buscar..." style="max-width:280px"/>
+      <button id="newCondoBtn" class="btn btn-primary" style="width:auto;padding:0 20px">+ Novo</button>
+    </div>
+  </div>
+  <div class="text-sm text-gray-500 mb-3" id="condoStatus"></div>
+  <section class="card">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-left text-gray-500 border-b border-gray-100">
+          <tr><th class="py-2 pr-3">Nome</th><th class="pr-3">Endereço</th><th class="pr-3">Cidade/UF</th><th class="pr-3">CEP</th><th class="pr-3">CNPJ</th><th class="pr-3 text-center">Lav.</th><th class="pr-3 text-center">Sec.</th><th class="pr-3">Manutenção</th><th></th></tr>
+        </thead>
+        <tbody id="condoRows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<main class="max-w-6xl mx-auto px-6 py-6 hidden" id="scheduleMain">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Agenda de visitas</h1>
+      <p class="text-sm text-gray-500">Gere um plano anual ou adicione visitas manualmente. Clique numa linha para reagendar.</p>
+    </div>
+    <button id="newVisitBtn" class="btn btn-primary" style="width:auto;padding:0 20px">+ Nova visita</button>
+  </div>
+  <section class="card mb-6">
+    <div class="flex flex-wrap items-end gap-3">
+      <div><label class="label">Ano</label><input id="schYear" type="number" value="2026" min="2025" max="2030" class="input" style="width:120px"/></div>
+      <div><label class="label">Frequência padrão</label>
+        <select id="schDefault" class="select">
+          <option value="1">Mensal</option>
+          <option value="2">Bimestral</option>
+          <option value="3">Trimestral</option>
+          <option value="6" selected>Semestral</option>
+          <option value="12">Anual</option>
+        </select>
+      </div>
+      <div class="flex-1 min-w-[220px]">
+        <label class="label">Técnicos</label>
+        <div id="techPicker" class="flex flex-wrap gap-2"></div>
+      </div>
+      <button id="schGenerate" class="btn btn-primary" style="width:auto;padding:0 22px">Gerar agenda do ano</button>
+    </div>
+    <p class="text-xs text-gray-500 mt-3">Gera todas as visitas preventivas do ano conforme a frequência de cada contrato (editável na aba Condomínios). Contratos sem frequência explícita usam o padrão selecionado.</p>
+  </section>
+  <div id="schStatus" class="text-sm text-gray-500 mb-3"></div>
+  <section class="card">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-left text-gray-500 border-b border-gray-100">
+          <tr><th class="py-2 pr-3">Data</th><th class="pr-3">Hora</th><th class="pr-3">Condomínio</th><th class="pr-3">Técnico</th><th class="pr-3">Tipo</th><th></th></tr>
+        </thead>
+        <tbody id="schRows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<main class="max-w-6xl mx-auto px-6 py-6 hidden" id="mapMain">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Mapa & Rota</h1>
+      <p class="text-sm text-gray-500">Visualize todos os condomínios no mapa e gere o roteiro otimizado de um dia.</p>
+    </div>
+    <button id="geocodeAll" class="btn btn-ghost" style="width:auto;padding:0 16px">Geocodificar pendentes</button>
+  </div>
+  <section class="card mb-4">
+    <div class="flex flex-wrap items-end gap-3">
+      <div><label class="label">Data</label><input id="rDate" type="date" class="input" style="width:160px"/></div>
+      <div><label class="label">Técnico</label><select id="rTech" class="select" style="width:180px"></select></div>
+      <button id="rLoad" class="btn btn-primary" style="width:auto;padding:0 18px">Carregar roteiro do dia</button>
+      <div class="ml-auto text-sm text-gray-500" id="rStats"></div>
+    </div>
+  </section>
+  <section class="card">
+    <div id="leafletMap" style="height:520px;border-radius:14px;overflow:hidden"></div>
+  </section>
+  <section class="card mt-4">
+    <div class="font-semibold mb-2">Roteiro do dia</div>
+    <ol id="routeList" class="text-sm space-y-1"></ol>
+  </section>
+</main>
+
+<main class="max-w-6xl mx-auto px-6 py-6 hidden" id="suppliesMain">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Insumos & Entregas</h1>
+      <p class="text-sm text-gray-500">Previsão automática por condomínio. Clique num condomínio (na aba Condomínios) para ajustar consumo.</p>
+    </div>
+    <button id="newDeliveryBtn" class="btn btn-primary" style="width:auto;padding:0 20px">+ Registrar entrega</button>
+  </div>
+  <section class="card mb-4">
+    <div class="flex items-center gap-2 text-sm">
+      <button data-urg="" class="urgTab chip" aria-pressed="true">Todos</button>
+      <button data-urg="urgente" class="urgTab chip chip-danger">Urgente (≤5d)</button>
+      <button data-urg="atencao" class="urgTab chip">Atenção (≤12d)</button>
+      <button data-urg="planejar" class="urgTab chip">Planejar (≤30d)</button>
+      <button data-urg="ok" class="urgTab chip chip-success">OK</button>
+      <div class="ml-auto text-sm text-gray-500" id="supStats"></div>
+    </div>
+  </section>
+  <section class="card">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-left text-gray-500 border-b border-gray-100">
+          <tr>
+            <th class="py-2 pr-3">Condomínio</th>
+            <th class="pr-3 text-center">Ciclos/sem</th>
+            <th class="pr-3">Sabão: galões · dias · urgência</th>
+            <th class="pr-3">Amaciante: galões · dias · urgência</th>
+            <th class="pr-3">Entregar em</th>
+            <th class="pr-3"></th>
+          </tr>
+        </thead>
+        <tbody id="supRows"></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="card mt-4 text-sm">
+    <div class="font-semibold mb-2">Consumo médio (configurável por condomínio na aba Condomínios)</div>
+    <div class="text-gray-600">Sabão: <b>50 ml/ciclo</b> · Amaciante: <b>50 ml/ciclo</b> · Galão: <b>5 L</b> (5.000 ml) · Lead time: <b>5 dias</b></div>
+    <div class="text-gray-500 text-xs mt-1">→ 1 galão = 100 ciclos · sabão/amaciante consumidos na mesma velocidade</div>
+  </section>
+</main>
+
+<main class="page hidden" id="calendarMain">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Agenda Geral</h1>
+      <p class="subtle">Eventos do Google Calendar, Microsoft Outlook e das manutenções preventivas em um só lugar.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-new ghost" id="calPrevBtn">‹ Mês anterior</button>
+      <button class="btn-new ghost" id="calTodayBtn">Hoje</button>
+      <button class="btn-new ghost" id="calNextBtn">Próximo mês ›</button>
+      <button class="btn-new brand" id="calRefreshBtn">↻ Atualizar</button>
+    </div>
+  </div>
+
+  <section class="card-new" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div id="calTitle" style="font-size:18px;font-weight:600"></div>
+      <div style="display:flex;gap:14px;font-size:12px;color:var(--ink-500);flex-wrap:wrap">
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#533C9D"></span>Manutenções</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#4285F4"></span>Google</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#0078D4"></span>Microsoft</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#94A3B8"></span>Outros</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card-new" style="padding:0;overflow:hidden">
+    <div id="calGrid" style="display:grid;grid-template-columns:repeat(7,1fr);min-height:560px"></div>
+  </section>
+
+  <section class="card-new" style="margin-top:16px">
+    <div class="card-header"><div class="card-title">Próximos 7 dias</div></div>
+    <div id="calList" style="font-size:13px"></div>
+  </section>
+
+  <section class="card-new" style="margin-top:16px;background:linear-gradient(180deg,var(--brand-50),transparent);border:1px dashed var(--brand-300)">
+    <div class="card-header"><div class="card-title">🔗 Como conectar seu Google/Microsoft</div></div>
+    <div style="font-size:13px;line-height:1.6">
+      <p><b>Google Calendar:</b> abra <a href="https://calendar.google.com" target="_blank" class="card-action">calendar.google.com</a> → Configurações do calendário → Integrar calendário → copie o <b>URL secreto no formato iCal</b>.</p>
+      <p><b>Microsoft Outlook / 365:</b> em Outlook web → Configurações → Calendário → Calendários compartilhados → Publicar um calendário → selecione permissão "Ver todos os detalhes" → copie o link <b>.ics</b>.</p>
+      <p>Cole esses URLs (separados por vírgula) na aba <b>Integrações</b> → card "Agenda externa (iCal)" e clique em Salvar. Os eventos aparecem aqui automaticamente.</p>
+    </div>
+  </section>
+</main>
+
+<main class="page hidden" id="deliveriesMain">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Entrega de Equipamentos</h1>
+      <p class="subtle">Termo digital assinado com geração automática de PDF. Uso mobile em campo.</p>
+    </div>
+    <button class="btn-new brand" id="newDeliveryFullBtn">+ Nova entrega</button>
+  </div>
+
+  <section class="grid-cards stagger" id="edKpis" style="margin-bottom:16px"></section>
+
+  <section class="card-new" style="margin-bottom:16px">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+      <div style="flex:1;min-width:200px">
+        <label class="label-new">Buscar</label>
+        <input id="edQ" class="input-new" placeholder="Condomínio ou responsável..."/>
+      </div>
+      <div>
+        <label class="label-new">Status</label>
+        <select id="edStatus" class="select-new" style="width:160px">
+          <option value="">Todos</option>
+          <option value="em_andamento">Em andamento</option>
+          <option value="finalizada">Finalizada</option>
+        </select>
+      </div>
+      <div>
+        <label class="label-new">De</label>
+        <input id="edFrom" type="date" class="input-new" style="width:150px"/>
+      </div>
+      <div>
+        <label class="label-new">Até</label>
+        <input id="edTo" type="date" class="input-new" style="width:150px"/>
+      </div>
+      <button id="edApply" class="btn-new brand">Filtrar</button>
+    </div>
+  </section>
+
+  <section class="card-new">
+    <div style="overflow-x:auto">
+      <table class="table-new">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Condomínio</th>
+            <th>Responsável</th>
+            <th>Data</th>
+            <th style="text-align:center">Conjuntos</th>
+            <th style="text-align:right">Valor</th>
+            <th>Status</th>
+            <th>Criado por</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="edRows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<main class="page hidden" id="implantationsMain">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Implantações</h1>
+      <p class="subtle">Passo a passo da instalação de cada condomínio novo. Acompanhe prazos contratuais, execução e conclusão.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-new ghost" id="backfillImplBtn">Criar para todos os condos sem implantação</button>
+      <button class="btn-new brand" id="newImplBtn">+ Nova implantação</button>
+    </div>
+  </div>
+
+  <section class="grid-cards stagger" id="implKpis" style="margin-bottom:16px"></section>
+
+  <section class="stagger" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Performance do SLA de 60 dias</div></div>
+      <div id="implSLAChart" class="chart-box sm"><canvas id="chartSLAPie"></canvas></div>
+      <div id="implSLALegend" style="margin-top:12px;font-size:13px"></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Etapas que mais atrasam</div></div>
+      <div id="implTopDelays" style="display:flex;flex-direction:column;gap:10px;font-size:13px"></div>
+    </div>
+  </section>
+
+  <section class="card-new" style="margin-bottom:16px">
+    <div class="tab-pills">
+      <button class="tab-pill implTab active" data-s="">Todas</button>
+      <button class="tab-pill implTab" data-s="agendada">Agendadas</button>
+      <button class="tab-pill implTab" data-s="em_andamento">Em andamento</button>
+      <button class="tab-pill implTab" data-s="concluida">Concluídas</button>
+      <button class="tab-pill implTab" data-s="cancelada">Canceladas</button>
+    </div>
+    <div style="margin-top:14px" id="implStats"></div>
+  </section>
+
+  <section class="card-new">
+    <div style="overflow-x:auto">
+      <table class="table-new">
+        <thead>
+          <tr>
+            <th>Condomínio</th>
+            <th>Cidade</th>
+            <th style="width:180px">Progresso</th>
+            <th>Status</th>
+            <th>Prazo</th>
+            <th>Técnico</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="implRows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<main class="page hidden" id="historyMain">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Histórico de consumo</h1>
+      <p class="subtle">Ciclos rodados e insumos entregues ao longo do tempo. Filtra por condomínio e período.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-new ghost" id="histExportBtn">Exportar CSV</button>
+    </div>
+  </div>
+
+  <section class="card-new" style="margin-bottom:16px">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+      <div>
+        <label class="label-new">Condomínio</label>
+        <select id="histCondo" class="select-new" style="min-width:240px"><option value="">Todos</option></select>
+      </div>
+      <div>
+        <label class="label-new">Agregar por</label>
+        <div class="tab-pills">
+          <button class="tab-pill histPeriod" data-p="day">Dia</button>
+          <button class="tab-pill histPeriod active" data-p="week">Semana</button>
+          <button class="tab-pill histPeriod" data-p="month">Mês</button>
+          <button class="tab-pill histPeriod" data-p="year">Ano</button>
+        </div>
+      </div>
+      <div>
+        <label class="label-new">De</label>
+        <input id="histFrom" type="date" class="input-new" style="width:150px"/>
+      </div>
+      <div>
+        <label class="label-new">Até</label>
+        <input id="histTo" type="date" class="input-new" style="width:150px"/>
+      </div>
+      <button id="histApply" class="btn-new brand">Aplicar</button>
+    </div>
+  </section>
+
+  <section class="grid-cards" style="margin-bottom:16px" id="histTotals"></section>
+
+  <section class="card-new" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Consumo de insumos</div></div>
+    <div class="chart-box"><canvas id="histChartSupplies"></canvas></div>
+  </section>
+
+  <section class="card-new" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Ciclos rodados</div></div>
+    <div class="chart-box sm"><canvas id="histChartCycles"></canvas></div>
+  </section>
+
+  <section class="card-new">
+    <div class="card-header"><div class="card-title">Detalhe por período</div></div>
+    <div style="overflow-x:auto">
+      <table class="table-new">
+        <thead><tr><th>Período</th><th style="text-align:right">Sabão (gal)</th><th style="text-align:right">Amaciante (gal)</th><th style="text-align:right">Ciclos</th></tr></thead>
+        <tbody id="histRows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<main class="max-w-6xl mx-auto px-6 py-6 hidden" id="ticketsMain">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Chamados</h1>
+      <p class="text-sm text-gray-500">Solicitações abertas pelos condomínios. Clique num cartão para atualizar status ou atribuir.</p>
+    </div>
+    <a href="/chamado.html" target="_blank" class="chip" aria-pressed="true">🔗 Link público de abertura</a>
+  </div>
+  <section class="grid grid-cols-1 md:grid-cols-4 gap-3" id="ticketBoard">
+    <div class="card"><div class="font-semibold mb-3 flex items-center justify-between">Aberto <span id="cntAberto" class="chip chip-danger"></span></div><div id="colAberto" class="kanban-col space-y-2" data-status="aberto"></div></div>
+    <div class="card"><div class="font-semibold mb-3 flex items-center justify-between">Em andamento <span id="cntAnd" class="chip"></span></div><div id="colAnd" class="kanban-col space-y-2" data-status="em_andamento"></div></div>
+    <div class="card"><div class="font-semibold mb-3 flex items-center justify-between">Resolvido <span id="cntRes" class="chip chip-success"></span></div><div id="colRes" class="kanban-col space-y-2" data-status="resolvido"></div></div>
+    <div class="card"><div class="font-semibold mb-3 flex items-center justify-between">Fechado <span id="cntFec" class="chip"></span></div><div id="colFec" class="kanban-col space-y-2" data-status="fechado"></div></div>
+  </section>
+  <div class="text-xs text-gray-500 mt-3">💡 Arraste um cartão entre colunas para atualizar o status. O condomínio é notificado automaticamente por e-mail e WhatsApp.</div>
+</main>
+
+<main class="max-w-6xl mx-auto px-6 py-6 hidden" id="importMain">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Importar contratos do Autentique</h1>
+      <p class="text-sm text-gray-500">Cada contrato assinado vira um condomínio no sistema. Revise e edite antes de salvar.</p>
+    </div>
+    <div class="flex gap-2">
+      <button id="refreshImport" class="btn btn-ghost" style="width:auto;padding:0 16px">Recarregar</button>
+      <button id="importSelected" class="btn btn-primary" style="width:auto;padding:0 18px">Importar selecionados</button>
+    </div>
+  </div>
+
+  <div id="importStatus" class="text-sm text-gray-500 mb-3">Buscando contratos no Autentique...</div>
+
+  <section class="card">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-left text-gray-500 border-b border-gray-100">
+          <tr>
+            <th class="py-2 pr-3 w-8"><input type="checkbox" id="selAll"/></th>
+            <th class="pr-3">Contrato</th>
+            <th class="pr-3">Condomínio</th>
+            <th class="pr-3">Endereço</th>
+            <th class="pr-3">Cidade/UF</th>
+            <th class="pr-3">CEP</th>
+            <th class="pr-3 text-center">Lavadoras</th>
+            <th class="pr-3 text-center">Secadoras</th>
+          </tr>
+        </thead>
+        <tbody id="contractsRows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<main class="max-w-6xl mx-auto px-6 py-6 hidden" id="integrationsMain">
+  <h1 class="text-2xl font-bold tracking-tight">Integrações</h1>
+  <p class="text-sm text-gray-500 mb-6">Configure credenciais dos serviços externos. Tudo fica salvo no banco e sobrepõe o .env.</p>
+
+  <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <div class="card lg:col-span-2" style="border-left:3px solid var(--danger)">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold">🚨 Central de Alertas — contatos do admin</div>
+        <label class="flex items-center gap-2 text-xs" style="cursor:pointer">
+          <input type="checkbox" id="aggressiveMode" style="width:14px;height:14px;cursor:pointer"/>
+          <span>Modo agressivo (popup + som)</span>
+        </label>
+      </div>
+      <p class="text-xs text-gray-500 mb-3">Para onde enviar alertas automaticamente quando algo crítico acontece. Separe vários com vírgula.</p>
+      <div class="grid grid-cols-2 gap-2">
+        <input class="input py-2" data-int="admin_contacts" data-k="emails" placeholder="admin@lavandery.com, outro@email.com"/>
+        <input class="input py-2" data-int="admin_contacts" data-k="phones" placeholder="11987654321, 11999998888"/>
+        <select class="select py-2 col-span-2" data-int="admin_contacts" data-k="escalation_minutes" title="Re-enviar alerta crítico a cada...">
+          <option value="0">Enviar 1 vez por alerta (default)</option>
+          <option value="15">Re-enviar a cada 15 min até reconhecer</option>
+          <option value="30">Re-enviar a cada 30 min até reconhecer</option>
+          <option value="60">Re-enviar a cada 1 hora até reconhecer</option>
+        </select>
+      </div>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip" id="testAlertBtn">Disparar teste</button>
+        <button class="btn btn-primary intSave" data-int="admin_contacts" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">💡 Alertas vão para <b>e-mail</b> (precisa SMTP), <b>WhatsApp</b> (precisa Web conectado), <b>popup</b> na tela e <b>notificação desktop</b> do navegador.</p>
+    </div>
+
+    <div class="card lg:col-span-2">
+      <div class="font-semibold mb-2">📅 Agenda externa (iCal · Google + Microsoft)</div>
+      <p class="text-xs text-gray-500 mb-3">URLs iCal separadas por vírgula. Exporte do Google Calendar (URL secreto) ou Outlook (calendário publicado).</p>
+      <textarea class="textarea py-2" rows="3" data-int="calendar_feeds" data-k="urls" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics,&#10;https://outlook.office365.com/owa/calendar/.../calendar.ics"></textarea>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip intTest" data-int="calendar_feeds">Testar</button>
+        <button class="btn btn-primary intSave" data-int="calendar_feeds" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+      <div style="margin-top:18px;padding-top:14px;border-top:1px dashed var(--ink-200)">
+        <div class="font-semibold mb-1" style="font-size:14px">📤 Publicar manutenções da Lavandery no seu Outlook/Google</div>
+        <p class="text-xs text-gray-500 mb-2">Copie a URL abaixo e assine como calendário externo no Outlook (Adicionar calendário → Assinar da web) ou Google (Outros calendários → Por URL).</p>
+        <div class="flex gap-2">
+          <input id="exportIcsUrl" class="input py-2" readonly style="font-size:12px;font-family:monospace" />
+          <button class="chip" id="copyExportIcs">Copiar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card lg:col-span-2" style="border-left:3px solid var(--brand-700)">
+      <div class="font-semibold mb-2">🏗 Notificações de Implantação</div>
+      <p class="text-xs text-gray-500 mb-3">Quais eventos disparam e-mail/WhatsApp pros admins cadastrados. O condomínio é notificado em eventos relevantes pra ele (status, prazo, conclusão).</p>
+      <div class="grid grid-cols-2 gap-2 text-sm" id="implEventsGrid">
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="step.completed" checked/> Etapa concluída</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="step.reopened"/> Etapa reaberta</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="item.completed"/> Item marcado</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="status.changed" checked/> Status alterado</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="deadline.changed" checked/> Prazo alterado</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="implantation.completed" checked/> Implantação concluída 🎉</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="file.uploaded" checked/> Foto anexada</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="type.changed"/> Tipo de obra alterado</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="technician.changed"/> Técnico alterado</label>
+        <label class="flex items-center gap-2"><input type="checkbox" class="implEvt" data-ev="template.reset"/> Template resetado</label>
+      </div>
+      <label class="flex items-center gap-2 text-sm mt-3"><input type="checkbox" id="implNotifyCondo" checked/> Notificar condomínio (quando o evento é relevante)</label>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="btn btn-primary" id="saveImplNotify" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+    </div>
+
+    <div class="card lg:col-span-2">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold">📧 E-mail · Microsoft 365 (Outlook / Exchange Online)</div>
+        <button id="msPreset" class="chip" style="font-size:12px">Preencher com valores Microsoft</button>
+      </div>
+      <p class="text-xs text-gray-500 mb-3">Envio via SMTP TLS do Office 365. Se sua conta tem MFA, crie uma <a href="https://account.microsoft.com/security" target="_blank" class="underline">senha de aplicativo</a> em vez da senha da conta.</p>
+      <div class="grid grid-cols-2 gap-2">
+        <input class="input py-2" data-int="smtp" data-k="host" placeholder="smtp.office365.com"/>
+        <input class="input py-2" data-int="smtp" data-k="port" placeholder="587"/>
+        <input class="input py-2" data-int="smtp" data-k="user" placeholder="contato@lavandery.com.br"/>
+        <input class="input py-2" data-int="smtp" data-k="pass" placeholder="senha do app" type="password"/>
+        <input class="input py-2 col-span-2" data-int="smtp" data-k="from" placeholder="Lavandery <contato@lavandery.com.br>"/>
+      </div>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip" id="smtpTestBtn">Enviar e-mail de teste</button>
+        <button class="btn btn-primary intSave" data-int="smtp" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+    </div>
+
+    <div class="card lg:col-span-2">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold">📱 WhatsApp Web (não-oficial)</div>
+        <span id="waStatusBadge" class="chip" aria-pressed="true">—</span>
+      </div>
+      <p class="text-xs text-gray-500 mb-3">Conexão via Baileys — escaneie o QR uma vez com o celular que vai receber/enviar mensagens. A sessão fica salva e reconecta sozinha.</p>
+      <div class="flex items-start gap-4">
+        <div id="waQrHost" class="p-2 border rounded-lg bg-white" style="min-width:140px;min-height:140px;display:grid;place-items:center">
+          <span class="text-xs text-gray-400">Desconectado</span>
+        </div>
+        <div class="flex-1 text-sm space-y-2">
+          <div id="waMe" class="text-gray-600"></div>
+          <div id="waHelp" class="text-xs text-gray-500">Clique em Conectar para gerar o QR. No WhatsApp do seu celular: Configurações → Aparelhos conectados → Conectar um aparelho.</div>
+          <div class="flex gap-2 mt-3">
+            <button class="btn btn-primary" id="waConnectBtn" style="width:auto;padding:0 18px">Conectar</button>
+            <button class="btn btn-ghost" id="waDisconnectBtn" style="width:auto;padding:0 18px">Desconectar</button>
+            <button class="chip" id="waTestBtn">Enviar teste</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="font-semibold mb-2">🗺️ Google Maps</div>
+      <p class="text-xs text-gray-500 mb-3">Roteirização real por ruas + distâncias/tempo. Habilite <b>Geocoding API</b> e <b>Distance Matrix API</b> no console do Google.</p>
+      <input class="input py-2" data-int="google_maps" data-k="api_key" placeholder="API key"/>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip intTest" data-int="google_maps">Testar</button>
+        <button class="btn btn-primary intSave" data-int="google_maps" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+    </div>
+
+    <div class="card lg:col-span-2">
+      <div class="font-semibold mb-2">🗂️ Google Drive — fotos (grátis, 15 GB)</div>
+      <p class="text-xs text-gray-500 mb-3">
+        As fotos ficam numa pasta do seu Google Drive. Precisa de 3 passos:
+        <b>1)</b> <a class="underline" target="_blank" href="https://console.cloud.google.com/apis/library/drive.googleapis.com">habilitar a Drive API</a> no seu projeto Cloud;
+        <b>2)</b> criar uma conta de serviço em <a class="underline" target="_blank" href="https://console.cloud.google.com/iam-admin/serviceaccounts">IAM → Service Accounts</a> e gerar uma chave JSON;
+        <b>3)</b> criar uma pasta no Drive, compartilhar com o e-mail da service account (role Editor), e colar o ID da pasta (parte depois de <code>/folders/</code> na URL).
+      </p>
+      <div class="grid grid-cols-1 gap-2">
+        <input class="input py-2" data-int="gdrive" data-k="folder_id" placeholder="ID da pasta (ex: 1aBcD3FgHiJkLmNoPqR4sTuVwXyZ)"/>
+        <textarea class="textarea" data-int="gdrive" data-k="service_account_json" rows="6" placeholder='Cole o JSON da conta de serviço aqui:&#10;{&#10;  "type": "service_account",&#10;  "project_id": "...",&#10;  "client_email": "lavandery@....iam.gserviceaccount.com",&#10;  "private_key": "-----BEGIN PRIVATE KEY-----\n..."&#10;}'></textarea>
+      </div>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip intTest" data-int="gdrive">Testar</button>
+        <button class="btn btn-primary intSave" data-int="gdrive" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">💡 Ao finalizar uma visita, as fotos são enviadas para essa pasta. O link público (qualquer pessoa com o link) é salvo junto com a visita e aparece no relatório PDF.</p>
+    </div>
+
+    <div class="card">
+      <div class="font-semibold mb-2">💳 Asaas (cobrança)</div>
+      <p class="text-xs text-gray-500 mb-3">Cobrar mensalidade dos condomínios. Gateway brasileiro popular.</p>
+      <div class="grid grid-cols-2 gap-2">
+        <input class="input py-2" data-int="asaas" data-k="api_key" placeholder="API key" type="password"/>
+        <select class="select py-2" data-int="asaas" data-k="env">
+          <option value="sandbox">sandbox</option><option value="production">production</option>
+        </select>
+      </div>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip intTest" data-int="asaas">Testar</button>
+        <button class="btn btn-primary intSave" data-int="asaas" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="font-semibold mb-2">🚨 Sentry</div>
+      <p class="text-xs text-gray-500 mb-3">Captura de erros em produção.</p>
+      <input class="input py-2" data-int="sentry" data-k="dsn" placeholder="https://...@sentry.io/..."/>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip intTest" data-int="sentry">Testar</button>
+        <button class="btn btn-primary intSave" data-int="sentry" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card mb-6">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <div class="font-semibold">🔑 API Tokens (Bearer)</div>
+        <div class="text-xs text-gray-500">Outro sistema consome <code>/api/v1/*</code> usando <code>Authorization: Bearer &lt;token&gt;</code></div>
+      </div>
+      <button class="btn btn-primary" id="newTokenBtn" style="width:auto;padding:0 18px">+ Gerar token</button>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="text-left text-gray-500 border-b border-gray-100"><tr>
+        <th class="py-2 pr-3">Nome</th><th class="pr-3">Preview</th><th class="pr-3">Escopo</th><th class="pr-3">Último uso</th><th></th>
+      </tr></thead>
+      <tbody id="tokenRows"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <div class="font-semibold">🔔 Webhooks</div>
+        <div class="text-xs text-gray-500">Recebem eventos do Lavandery: <code>ticket.created</code>, <code>ticket.status_changed</code>, <code>delivery.registered</code>, <code>visit.finalized</code></div>
+      </div>
+      <button class="btn btn-primary" id="newWebhookBtn" style="width:auto;padding:0 18px">+ Novo webhook</button>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="text-left text-gray-500 border-b border-gray-100"><tr>
+        <th class="py-2 pr-3">URL</th><th class="pr-3">Eventos</th><th class="pr-3">Ativo</th><th></th>
+      </tr></thead>
+      <tbody id="webhookRows"></tbody>
+    </table>
+    <div class="text-xs text-gray-500 mt-3">Assinatura HMAC SHA256 no header <code>X-Lavandery-Signature</code>. Evento no header <code>X-Lavandery-Event</code>.</div>
+    <div class="text-xs text-gray-500 mt-2">Webhook de entrada: <code>POST /api/webhooks/incoming/&lt;source&gt;</code> — payload livre, disponível em "Eventos" + emite <code>incoming.&lt;source&gt;</code></div>
+  </section>
+</main>
+
+  </div><!-- /main column -->
+</div><!-- /app-shell -->
+
+<div id="overlay" class="overlay"></div>
+<aside id="condoDrawer" class="drawer"></aside>
+<aside id="implDrawer" class="drawer"></aside>
+<aside id="edDrawer" class="drawer"></aside>
+<div id="ticketModal" class="modal"></div>
+<div id="deliveryModal" class="modal"></div>
+<div id="scheduleModal" class="modal"></div>
+
+<script>
+
+const BRAND = { primary:'#533C9D', secondary:'#654ABA', light:'#A292D5', pale:'#E0DBF1', success:'#16A34A', warning:'#F59E0B', danger:'#DC2626', ink:'#111827' };
+const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+let _charts = {};
+function chartDestroy(id) { if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; } }
+
+async function load() {
+  const r = await fetch('/api/dashboard');
+  if (!r.ok) { document.querySelector('#dashSubtitle').textContent = 'Erro carregando dashboard.'; return; }
+  const d = await r.json();
+  const now = new Date();
+  document.querySelector('#dashSubtitle').textContent = `Atualizado ${now.toLocaleString('pt-BR',{dateStyle:'short', timeStyle:'short'})} · ${d.year}`;
+  document.querySelector('#visitsYearLabel').textContent = d.year;
+  document.querySelector('#visitsTotal').textContent = `${d.visits.year} visitas agendadas`;
+
+  renderKPIs(d);
+  renderVisitsChart(d);
+  renderTechChart(d);
+  renderSuppliesChart(d);
+  renderTicketsChart(d);
+  renderCities(d);
+  renderNextVisits();
+  renderActivity(d);
+}
+
+function renderKPIs(d) {
+  const items = [
+    ['Condomínios', d.totals.condos, 'condos', '#533C9D', 'ativos no contrato'],
+    ['Máquinas', `${d.totals.washers}L + ${d.totals.dryers}S`, 'condos', '#654ABA', `${d.totals.washers + d.totals.dryers} equipamentos`],
+    ['Agenda ' + d.year, d.visits.year, 'schedule', '#9C83D8', 'visitas planejadas'],
+    ['Próximos 7 dias', d.visits.next7, 'schedule', '#10B981', 'visitas programadas'],
+    ['Entregas urgentes', d.supplies.urgente, 'supplies', d.supplies.urgente ? '#EF4444' : '#10B981', d.supplies.urgente ? 'atenção imediata' : 'tudo sob controle'],
+    ['Chamados abertos', d.tickets.open, 'tickets', d.tickets.open ? '#F59E0B' : '#10B981', d.tickets.open ? 'aguardando resposta' : 'nenhum pendente'],
+  ];
+  document.querySelector('#kpis').innerHTML = items.map(([l,v,tab,accent,sub])=>`
+    <div class="stat-card kpiCard" data-tab="${tab}" style="--accent:${accent}">
+      <div class="stat-label">${l}</div>
+      <div class="stat-value" data-counter="${typeof v === 'number' ? v : ''}">${v}</div>
+      <div class="stat-sub">${sub}</div>
+    </div>`).join('');
+  document.querySelectorAll('.kpiCard').forEach(el => el.addEventListener('click', () => showTab(el.dataset.tab)));
+  // Animated counters
+  document.querySelectorAll('[data-counter]').forEach(el => {
+    const target = parseInt(el.dataset.counter, 10);
+    if (!target || target < 2) return;
+    let cur = 0; const dur = 900; const start = performance.now();
+    const tick = (t) => {
+      const p = Math.min((t - start) / dur, 1);
+      cur = Math.round(target * (1 - Math.pow(1 - p, 3)));
+      el.textContent = cur;
+      if (p < 1) requestAnimationFrame(tick);
+      else el.textContent = target;
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+function renderVisitsChart(d) {
+  chartDestroy('visits');
+  const months = Array.from({length:12}, (_,i) => String(i+1).padStart(2,'0'));
+  const data = months.map(m => (d.visits.perMonth.find(x=>x.m===m)?.c) || 0);
+  const ctx = document.getElementById('chartVisits').getContext('2d');
+  _charts.visits = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: MONTHS, datasets: [{ label:'Visitas', data, backgroundColor: BRAND.primary, borderRadius: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 10 }, grid: { color:'#F3F4F6' } }, x: { grid: { display: false } } },
+    }
+  });
+}
+
+function renderTechChart(d) {
+  chartDestroy('tech');
+  const data = d.visits.perTech.filter(t => t.name);
+  const ctx = document.getElementById('chartTech').getContext('2d');
+  _charts.tech = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: data.map(x=>x.name), datasets: [{ data: data.map(x=>x.c), backgroundColor:[BRAND.primary, BRAND.light, BRAND.success, BRAND.warning] }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }
+  });
+  const total = data.reduce((s,x)=>s+x.c,0) || 1;
+  document.querySelector('#techLegend').innerHTML = data.map((t,i) => `
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2"><span class="inline-block w-3 h-3 rounded-full" style="background:${[BRAND.primary,BRAND.light,BRAND.success,BRAND.warning][i]}"></span>${t.name}</div>
+      <div class="text-gray-500">${t.c} <span class="text-gray-400">(${Math.round(t.c/total*100)}%)</span></div>
+    </div>`).join('');
+}
+
+function renderSuppliesChart(d) {
+  chartDestroy('sup');
+  const labels = ['Urgente','Atenção','Planejar','OK'];
+  const colors = [BRAND.danger, BRAND.warning, BRAND.light, BRAND.success];
+  const vals = [d.supplies.urgente, d.supplies.atencao, d.supplies.planejar, d.supplies.ok];
+  const ctx = document.getElementById('chartSupplies').getContext('2d');
+  _charts.sup = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets:[{ data: vals, backgroundColor: colors }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display:false } } }
+  });
+  document.querySelector('#suppliesLegend').innerHTML = labels.map((l,i) => `
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2"><span class="inline-block w-3 h-3 rounded-full" style="background:${colors[i]}"></span>${l}</div>
+      <div class="text-gray-500">${vals[i]}</div>
+    </div>`).join('');
+}
+
+function renderTicketsChart(d) {
+  chartDestroy('tk');
+  const labels = ['Aberto','Em andamento','Resolvido','Fechado'];
+  const colors = [BRAND.danger, BRAND.warning, BRAND.success, '#9CA3AF'];
+  const keyOf = { aberto: 0, em_andamento: 1, resolvido: 2, fechado: 3 };
+  const vals = [0,0,0,0];
+  d.tickets.byStatus.forEach(s => { if (keyOf[s.status] != null) vals[keyOf[s.status]] = s.c; });
+  const ctx = document.getElementById('chartTickets').getContext('2d');
+  _charts.tk = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets:[{ data: vals, backgroundColor: colors }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display:false } } }
+  });
+  document.querySelector('#ticketsLegend').innerHTML = labels.map((l,i) => `
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2"><span class="inline-block w-3 h-3 rounded-full" style="background:${colors[i]}"></span>${l}</div>
+      <div class="text-gray-500">${vals[i]}</div>
+    </div>`).join('');
+}
+
+function renderCities(d) {
+  const max = Math.max(...d.cities.map(c=>c.c), 1);
+  document.querySelector('#citiesList').innerHTML = d.cities.map(c => `
+    <div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="color:var(--ink-800)">${esc(c.city)}</span>
+        <span class="mono" style="color:var(--ink-500)">${c.c}</span>
+      </div>
+      <div style="height:6px;background:var(--ink-100);border-radius:3px;overflow:hidden">
+        <div style="width:${Math.round(c.c/max*100)}%;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));height:100%;border-radius:3px;transition:width 600ms var(--ease-out)"></div>
+      </div>
+    </div>`).join('') || '<div class="empty-state"><div class="title">Sem dados</div></div>';
+}
+
+async function renderNextVisits() {
+  const today = new Date().toISOString().slice(0,10);
+  const in7 = new Date(Date.now()+7*864e5).toISOString().slice(0,10);
+  const [rows, techs] = await Promise.all([
+    fetch(`/api/schedule?from=${today}&to=${in7}`).then(r=>r.json()),
+    fetch('/api/technicians').then(r=>r.json()),
+  ]);
+  const tm = Object.fromEntries(techs.map(t=>[t.id,t.name]));
+  const host = document.querySelector('#nextVisits');
+  if (!rows.length) { host.innerHTML = '<div class="text-gray-400">Sem visitas nos próximos 7 dias.</div>'; return; }
+  host.innerHTML = rows.slice(0,7).map(r => {
+    const dt = new Date(r.date+'T00:00:00');
+    const diff = Math.round((dt - new Date(today+'T00:00:00'))/864e5);
+    const pillCls = diff <= 1 ? 'danger' : diff <= 3 ? 'warning' : 'neutral';
+    const label = diff===0?'Hoje':diff===1?'Amanhã':`Em ${diff}d`;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--ink-100)">
+      <div style="min-width:0;flex:1">
+        <div style="font-weight:500;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.condo_name||'—')}</div>
+        <div style="font-size:12px;color:var(--ink-500);margin-top:2px">${dt.toLocaleDateString('pt-BR')} · ${r.scheduled_time||''} · ${esc(tm[r.technician_id]||'—')}</div>
+      </div>
+      <span class="pill ${pillCls}" style="white-space:nowrap">${label}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderActivity(d) {
+  const events = [];
+  d.recent.tickets.forEach(t => events.push({ ts: t.created_at, type:'ticket', text: `Chamado <b>${esc(t.title)}</b> em ${esc(t.condo||'—')}`, icon:'🎫', color: t.priority==='urgente'?BRAND.danger:BRAND.warning }));
+  d.recent.deliveries.forEach(x => events.push({ ts: x.delivered_at, type:'delivery', text: `Entrega de ${x.gallons} gal de ${x.product==='soap'?'sabão':'amaciante'} em ${esc(x.condo||'—')}`, icon:'📦', color: BRAND.success }));
+  events.sort((a,b) => b.ts - a.ts);
+  const host = document.querySelector('#activityFeed');
+  if (!events.length) { host.innerHTML = '<div class="text-gray-400">Sem atividade recente.</div>'; return; }
+  host.innerHTML = events.slice(0,10).map(e => `
+    <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--ink-100)">
+      <div style="width:32px;height:32px;border-radius:999px;background:${e.color}15;color:${e.color};display:grid;place-items:center;flex-shrink:0">${e.icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="color:var(--ink-800)">${e.text}</div>
+        <div style="font-size:11px;color:var(--ink-400);margin-top:2px">${new Date(e.ts).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</div>
+      </div>
+    </div>`).join('');
+}
+
+document.querySelector('#refreshDash')?.addEventListener('click', load);
+
+// ---------- Central de Alertas ----------
+let _alertsSeen = new Set();
+let _alertsPoll = null;
+
+async function loadAlerts(showToastOnNew = true) {
+  try {
+    const r = await fetch('/api/alerts');
+    if (!r.ok) return;
+    const data = await r.json();
+    const badge = document.querySelector('#bellBadge');
+    const count = data.counts.critical || 0;
+    const total = data.counts.total || 0;
+    if (total > 0) {
+      badge.style.display = 'grid';
+      badge.textContent = total > 99 ? '99+' : total;
+      badge.style.background = count > 0 ? 'var(--danger)' : 'var(--warning)';
+    } else {
+      badge.style.display = 'none';
+    }
+    document.querySelector('#alertsSummary').textContent =
+      `${data.counts.critical||0} críticos · ${data.counts.high||0} altos · ${data.counts.medium||0} médios · ${data.counts.info||0} info`;
+
+    // sidebar ticket badge (tickets count)
+    const tCount = data.alerts.filter(a => a.type === 'ticket').length;
+    const sbTkt = document.querySelector('#sidebarTicketsBadge');
+    if (sbTkt) { if (tCount > 0) { sbTkt.textContent = tCount; sbTkt.style.display = 'inline-grid'; } else sbTkt.style.display = 'none'; }
+
+    renderAlertsList(data.alerts);
+
+    // toast for new critical alerts
+    if (showToastOnNew) {
+      const newCrit = data.alerts.filter(a => a.severity === 'critical' && !_alertsSeen.has(a.id));
+      newCrit.forEach(a => fireCriticalToast(a));
+    }
+    data.alerts.forEach(a => _alertsSeen.add(a.id));
+  } catch (e) { /* offline */ }
+}
+function renderAlertsList(alerts) {
+  const host = document.querySelector('#alertsList');
+  if (!alerts.length) { host.innerHTML = `<div style="padding:36px 20px;text-align:center;color:var(--ink-400)"><div style="font-size:28px;opacity:.5">✓</div><div style="font-size:13px;margin-top:6px">Tudo em ordem</div></div>`; return; }
+  const iconOf = { supply: '🧴', ticket: '🎫', visit: '📅' };
+  const colorOf = { critical:'#EF4444', high:'#F59E0B', medium:'#3B82F6', info:'#6B6881' };
+  host.innerHTML = alerts.map(a => `
+    <div class="alertItem" data-tab="${a.action_tab}" data-id="${a.action_id||''}" style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--ink-100);cursor:pointer">
+      <div style="width:32px;height:32px;border-radius:999px;background:${colorOf[a.severity]}15;color:${colorOf[a.severity]};display:grid;place-items:center;flex-shrink:0;font-size:14px">${iconOf[a.type]||'•'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;color:var(--ink-900);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</div>
+        <div style="font-size:11px;color:var(--ink-500);margin-top:2px">${esc(a.body)}</div>
+      </div>
+      <span class="pill ${a.severity==='critical'?'danger':a.severity==='high'?'warning':a.severity==='medium'?'brand':'neutral'}" style="flex-shrink:0;align-self:flex-start">${a.severity==='critical'?'Crítico':a.severity==='high'?'Alto':a.severity==='medium'?'Médio':'Info'}</span>
+    </div>
+  `).join('');
+  host.querySelectorAll('.alertItem').forEach(el => el.addEventListener('click', () => {
+    closeAlertsPanel();
+    if (el.dataset.tab) showTab(el.dataset.tab);
+  }));
+}
+// Modo agressivo — grita ao ouvido do admin
+function isAggressive() { return localStorage.getItem('aggressive_mode') === '1'; }
+function setAggressive(v) { localStorage.setItem('aggressive_mode', v?'1':'0'); const el = document.querySelector('#aggressiveMode'); if (el) el.checked = v; }
+
+// Gerar um beep em loop via WebAudio (sem depender de arquivo)
+let _alarmCtx = null, _alarmOsc = null, _alarmGain = null, _alarmInterval = null;
+function startAlarm() {
+  try {
+    if (_alarmInterval) return;
+    if (!_alarmCtx) _alarmCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const beep = () => {
+      const osc = _alarmCtx.createOscillator();
+      const g = _alarmCtx.createGain();
+      osc.type = 'square'; osc.frequency.value = 880;
+      g.gain.value = 0.0001;
+      osc.connect(g); g.connect(_alarmCtx.destination);
+      osc.start();
+      g.gain.exponentialRampToValueAtTime(0.25, _alarmCtx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, _alarmCtx.currentTime + 0.15);
+      osc.stop(_alarmCtx.currentTime + 0.16);
+    };
+    beep();
+    _alarmInterval = setInterval(beep, 900);
+  } catch {}
+}
+function stopAlarm() { if (_alarmInterval) { clearInterval(_alarmInterval); _alarmInterval = null; } }
+
+// Notificação desktop nativa
+async function ensureNotifPermission() {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  const p = await Notification.requestPermission(); return p === 'granted';
+}
+async function desktopNotify(a) {
+  if (!(await ensureNotifPermission())) return;
+  try {
+    const n = new Notification(`🚨 ${a.title}`, { body: a.body, icon: '/logo.svg', tag: a.id, requireInteraction: a.severity === 'critical' });
+    n.onclick = () => { window.focus(); if (a.action_tab) showTab(a.action_tab); n.close(); };
+  } catch {}
+}
+
+// Popup bloqueante para alertas críticos (precisa Reconhecer)
+function showAlertPopup(a) {
+  const host = document.createElement('div');
+  host.className = 'cmdk-overlay open';
+  host.style.zIndex = '200';
+  host.innerHTML = `
+    <div class="cmdk-dialog open" style="background:#fff;max-width:480px;top:20%;border-top:4px solid var(--danger);animation:scaleIn 300ms var(--ease-out)">
+      <div style="padding:24px">
+        <div style="display:flex;align-items:flex-start;gap:14px">
+          <div style="width:44px;height:44px;background:rgba(239,68,68,.1);color:var(--danger);display:grid;place-items:center;border-radius:10px;font-size:22px;flex-shrink:0">🚨</div>
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600;color:var(--danger);text-transform:uppercase;letter-spacing:.05em">${a.severity==='critical'?'Crítico':'Alto'}</div>
+            <div style="font-size:18px;font-weight:600;color:var(--ink-900);margin-top:4px">${esc(a.title)}</div>
+            <div style="font-size:14px;color:var(--ink-600);margin-top:6px">${esc(a.body)}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+          <button class="btn-new ghost" id="__ackGo">Ver detalhes</button>
+          <button class="btn-new brand" id="__ackBtn">Reconhecer e silenciar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(host);
+  const cleanup = async () => { stopAlarm(); await fetch('/api/alerts/'+encodeURIComponent(a.id)+'/ack', { method:'POST' }).catch(()=>{}); host.remove(); };
+  host.querySelector('#__ackBtn').addEventListener('click', cleanup);
+  host.querySelector('#__ackGo').addEventListener('click', () => { cleanup(); if (a.action_tab) showTab(a.action_tab); });
+  if (a.severity === 'critical' && isAggressive()) startAlarm();
+}
+
+function fireCriticalToast(a) {
+  // Popup bloqueante sempre pra crítico
+  if (a.severity === 'critical') { showAlertPopup(a); desktopNotify(a); return; }
+  // Outros: toast + notificação desktop
+  const t = document.createElement('div');
+  t.className = 'toast-new ' + (a.severity==='high'?'danger':'');
+  t.style.cssText += ';max-width:380px';
+  t.innerHTML = `<div style="font-size:18px">${a.severity==='high'?'⚠️':'ℹ️'}</div><div style="flex:1"><div style="font-weight:600">${esc(a.title)}</div><div style="font-size:12px;opacity:.9;margin-top:2px">${esc(a.body)}</div></div><button style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px" onclick="this.parentElement.remove()">OK</button>`;
+  document.body.appendChild(t);
+  desktopNotify(a);
+  setTimeout(()=>t.remove(), 12000);
+}
+function openAlertsPanel() { document.querySelector('#alertsPanel').style.display = 'block'; }
+function closeAlertsPanel() { document.querySelector('#alertsPanel').style.display = 'none'; }
+document.querySelector('#bellBtn')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = document.querySelector('#alertsPanel');
+  panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#bellWrap')) closeAlertsPanel();
+});
+document.querySelector('#alertsRefresh')?.addEventListener('click', () => loadAlerts(false));
+
+// Start polling every 30s
+loadAlerts(false);
+_alertsPoll = setInterval(() => loadAlerts(true), 30_000);
+
+// Modo agressivo toggle + desktop notif permission
+document.addEventListener('DOMContentLoaded', () => {
+  const t = document.querySelector('#aggressiveMode');
+  if (t) {
+    t.checked = isAggressive();
+    t.addEventListener('change', async () => {
+      setAggressive(t.checked);
+      if (t.checked) { await ensureNotifPermission(); toast('Modo agressivo ATIVO — vai gritar com você'); }
+      else toast('Modo agressivo desligado');
+    });
+  }
+  const testBtn = document.querySelector('#testAlertBtn');
+  if (testBtn) testBtn.addEventListener('click', () => {
+    fireCriticalToast({ id:'test-'+Date.now(), severity:'critical', title:'Teste de alerta crítico', body:'Se você está vendo isto, o sistema está gritando certinho.', action_tab:'dash' });
+  });
+});
+// Re-trigger on tab focus so poll fires quando voltar da outra aba
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAlerts(true); });
+
+// ---------- Modal/Drawer plumbing ----------
+function openModal(el, html) { el.innerHTML = html; document.querySelector('#overlay').classList.add('show'); el.classList.add('show'); }
+function closeAll() { document.querySelector('#overlay').classList.remove('show'); document.querySelectorAll('.modal.show,.drawer.show').forEach(el=>el.classList.remove('show')); }
+document.querySelector('#overlay').addEventListener('click', closeAll);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
+
+// ---------- Condo Drawer ----------
+async function openCondoDrawer(id) {
+  const [c, techs] = await Promise.all([
+    fetch('/api/condominiums/'+id).then(r=>r.json()),
+    fetch('/api/technicians').then(r=>r.json())
+  ]);
+  const drawer = document.querySelector('#condoDrawer');
+  const techMap = Object.fromEntries(techs.map(t=>[t.id,t.name]));
+  const addr = [c.address, c.city, c.cep].filter(Boolean).join(', ');
+  const deliveriesRows = (c.deliveries||[]).slice(0,10).map(d => `
+    <div class="flex justify-between py-1 text-xs border-b border-gray-50">
+      <span>${new Date(d.delivered_at).toLocaleDateString('pt-BR')} · ${d.product==='soap'?'Sabão':'Amaciante'}</span>
+      <span class="font-medium">${d.gallons} gal</span>
+    </div>`).join('') || '<div class="text-xs text-gray-400">Sem entregas registradas</div>';
+  const scheduleRows = (c.schedule||[]).slice(0,8).map(s => `
+    <div class="flex justify-between py-1 text-xs border-b border-gray-50">
+      <span>${new Date(s.date).toLocaleDateString('pt-BR')} ${s.scheduled_time||''}</span>
+      <span class="text-gray-500">${esc(techMap[s.technician_id]||'—')} · ${esc(s.type)}</span>
+    </div>`).join('') || '<div class="text-xs text-gray-400">Sem visitas agendadas</div>';
+  const ticketRows = (c.tickets||[]).slice(0,8).map(t => `
+    <div class="flex justify-between py-1 text-xs border-b border-gray-50">
+      <span class="truncate max-w-[240px]">${esc(t.title)}</span>
+      <span class="chip ${t.status==='aberto'?'chip-danger':t.status==='resolvido'?'chip-success':''}" aria-pressed="true" style="font-size:10px;min-height:22px;padding:2px 8px">${esc(t.status)}</span>
+    </div>`).join('') || '<div class="text-xs text-gray-400">Sem chamados</div>';
+  const machinesRows = (c.machines||[]).map(m => `
+    <div class="row" data-mid="${m.id}" style="padding:8px 10px;min-height:auto">
+      <input class="input py-1" data-f="code" value="${esc(m.code||'')}" style="min-height:32px;width:110px"/>
+      <select class="select py-1" data-f="type" style="min-height:32px;width:120px">
+        <option${m.type==='Lavadora'?' selected':''}>Lavadora</option>
+        <option${m.type==='Secadora'?' selected':''}>Secadora</option>
+        <option${m.type==='Dosadora'?' selected':''}>Dosadora</option>
+      </select>
+      <input class="input py-1" data-f="brand" value="${esc(m.brand||'')}" placeholder="Marca" style="min-height:32px;flex:1"/>
+      <input class="input py-1" data-f="capacity" value="${esc(m.capacity||'')}" placeholder="Capac." style="min-height:32px;width:90px"/>
+      <button class="text-red-600 text-xs delMachine">×</button>
+    </div>`).join('');
+
+  drawer.innerHTML = `
+    <div class="drawer-header">
+      <div>
+        <div class="font-semibold text-lg tracking-tight">${esc(c.name)}</div>
+        <div class="text-xs text-gray-500">${esc(addr)}</div>
+      </div>
+      <button class="text-gray-500 text-xl closeBtn">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="section-title">Identificação</div>
+      <div class="grid grid-cols-1 gap-3">
+        <div><label class="label">Nome</label><input class="input" data-f="name" value="${esc(c.name||'')}"/></div>
+        <div><label class="label">Endereço</label><input class="input" data-f="address" value="${esc(c.address||'')}"/></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label">Cidade/UF</label><input class="input" data-f="city" value="${esc(c.city||'')}"/></div>
+          <div><label class="label">CEP</label><input class="input" data-f="cep" value="${esc(c.cep||'')}"/></div>
+        </div>
+        <div><label class="label">CNPJ</label><input class="input" data-f="cnpj" value="${esc(c.cnpj||'')}"/></div>
+        <div><label class="label">E-mail do responsável</label><input class="input" data-f="contact_email" type="email" value="${esc(c.contact_email||'')}" placeholder="sindico@condominio.com"/></div>
+        <div class="flex gap-2 items-center text-xs text-gray-500">
+          ${c.lat ? `📍 ${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}` : '<span class="text-red-600">Não geocodificado</span>'}
+          <button class="chip geocodeBtn" data-id="${c.id}" style="font-size:11px;min-height:26px">Geocodificar</button>
+        </div>
+      </div>
+
+      <div class="section-title">Manutenção preventiva</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="label">Frequência (meses)</label>
+          <select class="select" data-f="maintenance_interval_months">
+            <option value="1"${c.maintenance_interval_months===1?' selected':''}>Mensal</option>
+            <option value="2"${c.maintenance_interval_months===2?' selected':''}>Bimestral</option>
+            <option value="3"${c.maintenance_interval_months===3?' selected':''}>Trimestral</option>
+            <option value="4"${c.maintenance_interval_months===4?' selected':''}>Quadrimestral</option>
+            <option value="6"${c.maintenance_interval_months===6?' selected':''}>Semestral</option>
+            <option value="12"${c.maintenance_interval_months===12?' selected':''}>Anual</option>
+          </select>
+        </div>
+        <div><label class="label">Rótulo</label><input class="input" data-f="maintenance_label" value="${esc(c.maintenance_label||'')}"/></div>
+      </div>
+
+      <div class="section-title">Máquinas & Consumo</div>
+      <div class="grid grid-cols-3 gap-3">
+        <div><label class="label">Lavadoras</label><input type="number" class="input" data-f="washers" value="${c.washers||0}"/></div>
+        <div><label class="label">Secadoras</label><input type="number" class="input" data-f="dryers" value="${c.dryers||0}"/></div>
+        <div><label class="label">Ciclos/semana</label><input type="number" class="input" data-f="cycles_per_week" value="${c.cycles_per_week||0}"/></div>
+      </div>
+      <div class="grid grid-cols-3 gap-3 mt-3">
+        <div><label class="label">Sabão (ml/ciclo)</label><input type="number" step="0.1" class="input" data-f="soap_ml_per_cycle" value="${c.soap_ml_per_cycle||50}"/></div>
+        <div><label class="label">Amaciante (ml/ciclo)</label><input type="number" step="0.1" class="input" data-f="softener_ml_per_cycle" value="${c.softener_ml_per_cycle||50}"/></div>
+        <div><label class="label">Galão (ml)</label><input type="number" class="input" data-f="gallon_ml" value="${c.gallon_ml||5000}"/></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-3">
+        <div><label class="label">Sabão no local (galões)</label><input type="number" step="0.1" class="input" data-f="soap_gallons_on_site" value="${c.soap_gallons_on_site||0}"/></div>
+        <div><label class="label">Amaciante no local (galões)</label><input type="number" step="0.1" class="input" data-f="softener_gallons_on_site" value="${c.softener_gallons_on_site||0}"/></div>
+      </div>
+      <div class="text-xs text-gray-500 mt-2">
+        Previsão: sabão <b>${c.forecast.soap.days_left}d</b> · amaciante <b>${c.forecast.softener.days_left}d</b> · consumo ${c.forecast.soap.gallons_per_month}gal sabão/mês
+      </div>
+
+      <div class="section-title">Máquinas cadastradas (${(c.machines||[]).length})</div>
+      <div id="machinesList" class="space-y-2">${machinesRows}</div>
+      <button id="addMachineBtn" class="chip mt-3">+ Adicionar máquina</button>
+
+      <div class="section-title">Registrar ciclos rodados</div>
+      <div class="card" style="padding:14px">
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div><label class="label">Início do período</label><input id="newLogStart" type="date" class="input py-1" style="min-height:34px"/></div>
+          <div><label class="label">Tipo</label>
+            <select id="newLogType" class="select py-1" style="min-height:34px;width:100px">
+              <option value="day">Dia</option>
+              <option value="week" selected>Semana</option>
+              <option value="month">Mês</option>
+            </select>
+          </div>
+          <div><label class="label">Ciclos</label><input id="newLogCycles" type="number" min="0" class="input py-1 text-center" style="min-height:34px;width:100px" placeholder="0"/></div>
+          <button id="addCycleLogBtn" class="btn btn-primary" style="width:auto;padding:0 18px;height:34px;min-height:0">Salvar</button>
+        </div>
+        <div id="cycleLogs" style="margin-top:12px;font-size:12px;max-height:200px;overflow-y:auto"></div>
+      </div>
+
+      <div class="section-title">Próximas visitas</div>
+      <div class="card" style="padding:10px 14px">${scheduleRows}</div>
+
+      <div class="section-title">Entregas recentes</div>
+      <div class="card" style="padding:10px 14px">${deliveriesRows}</div>
+      <button class="chip mt-2 deliveryBtn" data-id="${c.id}" data-name="${esc(c.name)}">+ Registrar entrega</button>
+
+      <div class="section-title">Entregas de equipamentos</div>
+      <div id="condoDeliveries" style="font-size:12px">Carregando...</div>
+
+      <div class="section-title">Link público de chamados</div>
+      <div class="card" style="padding:14px">
+        <div class="flex items-start gap-3">
+          <div id="qrHost" class="bg-white p-1 border rounded"></div>
+          <div class="flex-1 text-sm">
+            <div class="text-xs text-gray-500">Compartilhe com o síndico/morador. Só este condomínio aparece.</div>
+            <div class="mt-2"><input id="publicLink" class="input py-1" style="min-height:32px;font-size:12px" readonly value=""/></div>
+            <div class="flex gap-2 mt-2">
+              <button class="chip" id="copyLinkBtn">Copiar link</button>
+              <a class="chip" id="openLinkBtn" target="_blank">Abrir</a>
+              <a class="chip" id="downloadQrBtn" download="qr-lavandery.png">Baixar QR</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Chamados</div>
+      <div class="card" style="padding:10px 14px">${ticketRows}</div>
+
+      <div class="section-title">Zona de risco</div>
+      <button class="btn btn-danger" id="deleteCondoBtn" data-id="${c.id}">Excluir este condomínio</button>
+    </div>`;
+
+  // Autosave on any field
+  drawer.querySelectorAll('[data-f]').forEach(inp => inp.addEventListener('change', async () => {
+    const payload = {};
+    drawer.querySelectorAll('[data-f]').forEach(i => {
+      if (i.closest('[data-mid]')) return;
+      const v = i.type==='number' ? parseFloat(i.value)||0 : i.value;
+      payload[i.dataset.f] = v;
+    });
+    await fetch('/api/condominiums/'+c.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Alterações salvas');
+  }));
+  // Machines edit/delete/add
+  drawer.querySelectorAll('[data-mid]').forEach(row => {
+    row.querySelectorAll('[data-f]').forEach(i => i.addEventListener('change', async () => {
+      const b = {}; row.querySelectorAll('[data-f]').forEach(x => b[x.dataset.f] = x.value);
+      await fetch('/api/machines/'+row.dataset.mid, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b) });
+      toast('Máquina atualizada');
+    }));
+    row.querySelector('.delMachine').addEventListener('click', async () => {
+      if (!confirm('Excluir esta máquina?')) return;
+      await fetch('/api/machines/'+row.dataset.mid, { method:'DELETE' });
+      openCondoDrawer(c.id);
+    });
+  });
+  drawer.querySelector('#addMachineBtn').addEventListener('click', async () => {
+    const code = prompt('Código (ex: LVD-003):') || '';
+    await fetch('/api/condominiums/'+c.id+'/machines', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code, type:'Lavadora' }) });
+    openCondoDrawer(c.id);
+  });
+  drawer.querySelector('.geocodeBtn').addEventListener('click', async (e) => {
+    e.target.textContent = 'Geocodificando...';
+    const r = await fetch('/api/condominiums/'+c.id+'/geocode', { method:'POST' });
+    const d = await r.json();
+    if (r.ok) { toast(`📍 ${d.source}`); openCondoDrawer(c.id); }
+    else { toast('Falhou: '+(d.detail||d.error)); e.target.textContent = 'Geocodificar'; }
+  });
+  drawer.querySelector('.deliveryBtn').addEventListener('click', () => openDeliveryModal(c.id, c.name));
+  drawer.querySelector('#deleteCondoBtn').addEventListener('click', async () => {
+    if (!confirm('Excluir DEFINITIVAMENTE este condomínio? Todas as máquinas, visitas, chamados e entregas relacionados serão perdidos.')) return;
+    await fetch('/api/condominiums/'+c.id, { method:'DELETE' });
+    closeAll(); loadCondos();
+  });
+  // Cycle logs — list + add
+  const refreshCycleLogs = async () => {
+    const logs = await fetch('/api/cycle-logs/'+c.id).then(r=>r.ok?r.json():[]);
+    const host = drawer.querySelector('#cycleLogs');
+    if (!logs.length) { host.innerHTML = '<div style="color:var(--ink-400)">Sem registros ainda.</div>'; return; }
+    const typeLabel = { day:'dia', week:'sem', month:'mês' };
+    host.innerHTML = logs.slice(0,20).map(l => `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ink-100)">
+        <span>${new Date(l.period_start).toLocaleDateString('pt-BR')} <span style="color:var(--ink-400)">${typeLabel[l.period_type]||l.period_type}</span></span>
+        <span><b>${l.cycles.toLocaleString('pt-BR')}</b> ciclos <button class="text-red-600 delLog" data-id="${l.id}" style="background:none;border:none;cursor:pointer;margin-left:8px">×</button></span>
+      </div>`).join('');
+    host.querySelectorAll('.delLog').forEach(b => b.addEventListener('click', async e => {
+      if (!confirm('Excluir este registro?')) return;
+      await fetch('/api/cycle-logs/'+e.target.dataset.id, { method:'DELETE' });
+      refreshCycleLogs();
+    }));
+  };
+  drawer.querySelector('#newLogStart').value = new Date().toISOString().slice(0,10);
+  drawer.querySelector('#addCycleLogBtn').addEventListener('click', async () => {
+    const body = {
+      condo_id: c.id,
+      period_start: drawer.querySelector('#newLogStart').value,
+      period_type: drawer.querySelector('#newLogType').value,
+      cycles: parseInt(drawer.querySelector('#newLogCycles').value, 10) || 0,
+    };
+    if (!body.period_start || !body.cycles) { toast('Preencha data e ciclos'); return; }
+    await fetch('/api/cycle-logs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    drawer.querySelector('#newLogCycles').value = '';
+    refreshCycleLogs();
+    toast('✓ Registro salvo');
+  });
+  refreshCycleLogs();
+
+  // Entregas de equipamentos (histórico do condo)
+  try {
+    const edList = await fetch('/api/equipment-deliveries?condo_id='+c.id).then(r=>r.ok?r.json():[]);
+    const host = drawer.querySelector('#condoDeliveries');
+    if (!edList.length) host.innerHTML = '<div class="subtle">Nenhuma entrega registrada para este condomínio.</div>';
+    else host.innerHTML = edList.map(e => `
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--ink-100)">
+        <div>
+          <div><b>${e.delivery_date ? new Date(e.delivery_date).toLocaleDateString('pt-BR') : '—'}</b> · ${e.conjuntos_qty||0} conj. · <b style="color:var(--brand-700)">${BRL(e.total_value)}</b></div>
+          <div class="subtle" style="font-size:11px">${esc(e.responsible_name||'—')} · <span class="pill ${e.status==='finalizada'?'success':'warning'}" style="font-size:10px;padding:1px 6px">${e.status==='finalizada'?'Finalizada':'Em andamento'}</span></div>
+        </div>
+        ${e.status==='finalizada' ? `<a href="/api/equipment-deliveries/${e.id}/pdf" target="_blank" class="card-action" style="align-self:center">PDF ↗</a>` : ''}
+      </div>`).join('');
+  } catch {}
+
+  // Public link + QR
+  const publicUrl = `${location.origin}/chamado.html?c=${encodeURIComponent(c.slug || c.id)}`;
+  drawer.querySelector('#publicLink').value = publicUrl;
+  drawer.querySelector('#openLinkBtn').href = publicUrl;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=4&format=png&data=${encodeURIComponent(publicUrl)}`;
+  drawer.querySelector('#qrHost').innerHTML = `<img src="${qrUrl}" width="120" height="120" alt="QR"/>`;
+  drawer.querySelector('#downloadQrBtn').href = qrUrl.replace('120x120','400x400');
+  drawer.querySelector('#copyLinkBtn').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(publicUrl); toast('Link copiado'); } catch { prompt('Copie:', publicUrl); }
+  });
+  drawer.querySelector('.closeBtn').addEventListener('click', closeAll);
+
+  document.querySelector('#overlay').classList.add('show');
+  drawer.classList.add('show');
+}
+function toast(msg) {
+  const el = document.createElement('div'); el.className='toast show'; el.textContent = msg;
+  document.body.appendChild(el); setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(), 300); }, 1500);
+}
+
+// ---------- Ticket Modal ----------
+async function openTicketModal(id) {
+  const [tickets, techs] = await Promise.all([
+    fetch('/api/tickets').then(r=>r.json()),
+    fetch('/api/technicians').then(r=>r.json()),
+  ]);
+  const t = tickets.find(x=>x.id===id);
+  if (!t) return;
+  const modal = document.querySelector('#ticketModal');
+  modal.innerHTML = `
+    <div class="modal-header">
+      <div>
+        <div class="font-semibold text-lg tracking-tight">${esc(t.title)}</div>
+        <div class="text-xs text-gray-500">${esc(t.condo_name||'—')} · aberto ${new Date(t.created_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</div>
+      </div>
+      <button class="text-gray-500 text-xl closeBtn">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="text-sm mb-4 text-gray-600 whitespace-pre-wrap">${esc(t.description||'(sem descrição)')}</div>
+      <div class="text-xs text-gray-500">Aberto por: ${esc(t.opened_by_name||'—')} · ${esc(t.opened_by_email||'—')} · ${esc(t.opened_by_phone||'—')}</div>
+      <div class="grid grid-cols-2 gap-3 mt-4">
+        <div>
+          <label class="label">Status</label>
+          <select class="select" data-f="status">
+            ${['aberto','em_andamento','resolvido','fechado'].map(s => `<option value="${s}"${t.status===s?' selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="label">Prioridade</label>
+          <select class="select" data-f="priority">
+            ${['baixa','media','alta','urgente'].map(p => `<option value="${p}"${t.priority===p?' selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="label">Categoria</label>
+          <input class="input" value="${esc(t.category||'outro')}" disabled/>
+        </div>
+        <div>
+          <label class="label">Atribuir técnico</label>
+          <select class="select" data-f="assigned_to">
+            <option value="">— não atribuído —</option>
+            ${techs.map(x => `<option value="${x.id}"${t.assigned_to===x.id?' selected':''}>${esc(x.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="mt-4">
+        <label class="label">Resolução / Notas</label>
+        <textarea class="textarea" data-f="resolution" rows="3">${esc(t.resolution||'')}</textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="deleteTkt" style="width:auto;padding:0 18px">Excluir</button>
+      <button class="btn btn-ghost" id="closeTkt" style="width:auto;padding:0 22px">Cancelar</button>
+      <button class="btn btn-primary" id="saveTkt" style="width:auto;padding:0 24px">Salvar</button>
+    </div>`;
+  modal.querySelectorAll('.closeBtn, #closeTkt').forEach(b => b.addEventListener('click', closeAll));
+  modal.querySelector('#saveTkt').addEventListener('click', async () => {
+    const b = {};
+    modal.querySelectorAll('[data-f]').forEach(i => { const v = i.value; if (i.dataset.f === 'assigned_to') b.assigned_to = v||null; else b[i.dataset.f] = v; });
+    await fetch('/api/tickets/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b) });
+    closeAll(); loadTickets(); toast('Chamado atualizado');
+  });
+  modal.querySelector('#deleteTkt').addEventListener('click', async () => {
+    if (!confirm('Excluir este chamado?')) return;
+    await fetch('/api/tickets/'+id, { method:'DELETE' });
+    closeAll(); loadTickets();
+  });
+  document.querySelector('#overlay').classList.add('show');
+  modal.classList.add('show');
+}
+
+// ---------- Delivery Modal ----------
+async function openDeliveryModal(condoId, condoName) {
+  const modal = document.querySelector('#deliveryModal');
+  const condos = !condoId ? await fetch('/api/condominiums').then(r=>r.json()) : null;
+  modal.innerHTML = `
+    <div class="modal-header">
+      <div>
+        <div class="font-semibold text-lg tracking-tight">Registrar entrega</div>
+        <div class="text-xs text-gray-500">${esc(condoName || '')}</div>
+      </div>
+      <button class="text-gray-500 text-xl closeBtn">×</button>
+    </div>
+    <div class="modal-body">
+      ${condos ? `
+      <label class="label">Condomínio</label>
+      <select id="delvCondo" class="select mb-4">
+        ${condos.map(c => `<option value="${c.id}">${esc(c.name)} · ${esc(c.city||'')}</option>`).join('')}
+      </select>` : `<input type="hidden" id="delvCondo" value="${condoId}"/>`}
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="label">Sabão (galões)</label>
+          <input type="number" step="0.1" min="0" class="input" id="delvSoap" placeholder="0"/>
+        </div>
+        <div>
+          <label class="label">Amaciante (galões)</label>
+          <input type="number" step="0.1" min="0" class="input" id="delvSoft" placeholder="0"/>
+        </div>
+      </div>
+      <label class="label mt-3">Observações</label>
+      <textarea id="delvNote" class="textarea" rows="2" placeholder="Ex: entrega agendada com porteiro"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost closeBtn" style="width:auto;padding:0 22px">Cancelar</button>
+      <button class="btn btn-primary" id="saveDelv" style="width:auto;padding:0 24px">Registrar entrega</button>
+    </div>`;
+  modal.querySelectorAll('.closeBtn').forEach(b => b.addEventListener('click', closeAll));
+  modal.querySelector('#saveDelv').addEventListener('click', async () => {
+    const cid = modal.querySelector('#delvCondo').value;
+    const soap = parseFloat(modal.querySelector('#delvSoap').value)||0;
+    const soft = parseFloat(modal.querySelector('#delvSoft').value)||0;
+    const note = modal.querySelector('#delvNote').value;
+    if (!soap && !soft) { alert('Informe pelo menos um valor'); return; }
+    if (soap) await fetch('/api/deliveries', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ condo_id:cid, product:'soap', gallons: soap, note }) });
+    if (soft) await fetch('/api/deliveries', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ condo_id:cid, product:'softener', gallons: soft, note }) });
+    closeAll(); loadSupplies(); toast('Entrega registrada');
+  });
+  document.querySelector('#overlay').classList.add('show');
+  modal.classList.add('show');
+}
+
+// ---------- Schedule Modal ----------
+async function openScheduleModal(existing) {
+  const modal = document.querySelector('#scheduleModal');
+  const [condos, techs] = await Promise.all([
+    fetch('/api/condominiums').then(r=>r.json()),
+    fetch('/api/technicians').then(r=>r.json()),
+  ]);
+  const e = existing || { date: new Date().toISOString().slice(0,10), scheduled_time: '09:00', type: 'Preventiva' };
+  modal.innerHTML = `
+    <div class="modal-header">
+      <div class="font-semibold text-lg tracking-tight">${existing ? 'Reagendar visita' : 'Nova visita'}</div>
+      <button class="text-gray-500 text-xl closeBtn">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="label">Condomínio</label>
+      <select class="select mb-3" id="schCondo" ${existing?'disabled':''}>
+        ${condos.map(c => `<option value="${c.id}"${e.condo_id===c.id?' selected':''}>${esc(c.name)} · ${esc(c.city||'')}</option>`).join('')}
+      </select>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="label">Data</label><input type="date" class="input" id="schDate" value="${e.date}"/></div>
+        <div><label class="label">Hora</label><input type="time" class="input" id="schTime" value="${e.scheduled_time}"/></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-3">
+        <div>
+          <label class="label">Técnico</label>
+          <select class="select" id="schTech">
+            ${techs.map(t => `<option value="${t.id}"${e.technician_id===t.id?' selected':''}>${esc(t.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="label">Tipo</label>
+          <select class="select" id="schKind">
+            ${['Preventiva','Corretiva','Instalação','Avulsa'].map(k => `<option${e.type===k?' selected':''}>${k}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost closeBtn" style="width:auto;padding:0 22px">Cancelar</button>
+      <button class="btn btn-primary" id="saveSch" style="width:auto;padding:0 24px">${existing?'Atualizar':'Criar'}</button>
+    </div>`;
+  modal.querySelectorAll('.closeBtn').forEach(b => b.addEventListener('click', closeAll));
+  modal.querySelector('#saveSch').addEventListener('click', async () => {
+    const body = {
+      condo_id: modal.querySelector('#schCondo').value,
+      date: modal.querySelector('#schDate').value,
+      scheduled_time: modal.querySelector('#schTime').value,
+      technician_id: modal.querySelector('#schTech').value,
+      type: modal.querySelector('#schKind').value,
+    };
+    if (existing) await fetch('/api/schedule/'+existing.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    else await fetch('/api/schedule', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    closeAll(); loadSchedule(); toast('Agenda atualizada');
+  });
+  document.querySelector('#overlay').classList.add('show');
+  modal.classList.add('show');
+}
+
+// Bootstrap: verifica autenticação antes de carregar o painel
+(async () => {
+  try {
+    const r = await fetch('/api/auth/me');
+    if (!r.ok) { location.href = '/login.html?next=' + encodeURIComponent(location.pathname); return; }
+    const { user } = await r.json();
+    if (user.role === 'tecnico') { location.href = '/index.html'; return; }
+    const firstName = (user.name||user.email).split(' ')[0];
+    const nameEl = document.querySelector('#userName');
+    if (nameEl) {
+      nameEl.textContent = user.name || user.email;
+      document.querySelector('#userRole').textContent = { admin:'Administrador', gestor:'Gestor' }[user.role] || user.role;
+      document.querySelector('#userAvatar').textContent = firstName.charAt(0).toUpperCase();
+    }
+    // Saudação dinâmica
+    const h = new Date().getHours();
+    const greeting = h < 6 ? 'Boa madrugada' : h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    const emoji = h < 6 ? '🌙' : h < 12 ? '☀️' : h < 18 ? '👋' : '🌆';
+    const heroGreet = document.querySelector('#heroGreeting');
+    const heroName = document.querySelector('#heroName');
+    if (heroGreet) heroGreet.textContent = `${greeting} · ${emoji}`;
+    if (heroName) heroName.textContent = `Bem-vindo, ${firstName}`;
+    // Só carrega o dashboard depois de autenticado
+    load();
+  } catch(e) { location.href = '/login.html'; }
+})();
+document.querySelector('#logoutBtn')?.addEventListener('click', async () => {
+  if (!confirm('Sair do painel?')) return;
+  await fetch('/api/auth/logout', { method:'POST' });
+  location.href = '/login.html';
+});
+
+// ---------- Tabs ----------
+const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos' };
+function showTab(tab) {
+  document.querySelectorAll('.tab').forEach(a => a.classList.toggle('active', a.dataset.tab===tab));
+  const crumb = document.querySelector('#crumbTitle');
+  if (crumb) crumb.textContent = TAB_LABELS[tab] || tab;
+  document.querySelector('#dashMain').classList.toggle('hidden', tab!=='dash');
+  document.querySelector('#condosMain').classList.toggle('hidden', tab!=='condos');
+  document.querySelector('#scheduleMain').classList.toggle('hidden', tab!=='schedule');
+  document.querySelector('#mapMain').classList.toggle('hidden', tab!=='map');
+  document.querySelector('#suppliesMain').classList.toggle('hidden', tab!=='supplies');
+  document.querySelector('#historyMain')?.classList.toggle('hidden', tab!=='history');
+  document.querySelector('#implantationsMain')?.classList.toggle('hidden', tab!=='implantations');
+  document.querySelector('#deliveriesMain')?.classList.toggle('hidden', tab!=='deliveries');
+  document.querySelector('#calendarMain')?.classList.toggle('hidden', tab!=='calendar');
+  if (tab === 'implantations') loadImplantations();
+  if (tab === 'deliveries') loadDeliveries();
+  if (tab === 'calendar') loadCalendar();
+  document.querySelector('#ticketsMain').classList.toggle('hidden', tab!=='tickets');
+  document.querySelector('#importMain').classList.toggle('hidden', tab!=='import');
+  document.querySelector('#integrationsMain').classList.toggle('hidden', tab!=='integrations');
+  if (tab === 'import') loadContracts();
+  if (tab === 'condos') loadCondos();
+  if (tab === 'schedule') loadSchedule();
+  if (tab === 'map') loadMap();
+  if (tab === 'supplies') loadSupplies();
+  if (tab === 'tickets') loadTickets();
+  if (tab === 'history') loadHistory();
+  if (tab === 'integrations') { loadIntegrations(); startWaPoll(); } else { stopWaPoll?.(); }
+}
+
+// ---------- Integrations ----------
+async function loadIntegrations() {
+  // Load masked previews; inputs are empty (don't pre-fill secrets)
+  const list = await fetch('/api/integrations').then(r=>r.ok?r.json():[]);
+  const map = Object.fromEntries(list.map(x => [x.key, x]));
+  document.querySelectorAll('[data-int]').forEach(inp => {
+    const key = inp.dataset.int, k = inp.dataset.k;
+    if (!k) return;
+    const prev = map[key]?.preview?.[k];
+    if (prev) inp.placeholder = prev + ' (configurado)';
+  });
+  loadTokens(); loadWebhooks();
+  // Mostra URL de export .ics
+  try {
+    const exp = map['calendar_export']?.preview || {};
+    const token = exp.token ? ('?token=' + encodeURIComponent(exp.token)) : '';
+    const el = document.querySelector('#exportIcsUrl');
+    if (el) el.value = location.origin + '/api/public/calendar.ics' + token;
+  } catch {}
+  // Carrega config impl_notify
+  try {
+    const list = await fetch('/api/integrations').then(r=>r.ok?r.json():[]);
+    const row = list.find(x => x.key === 'impl_notify');
+    if (row) {
+      const cfg = row.preview || {};
+      const events = (cfg.events || '').toString().split(',').map(s=>s.trim()).filter(Boolean);
+      if (events.length) document.querySelectorAll('.implEvt').forEach(c => c.checked = events.includes(c.dataset.ev) || events.includes('*'));
+      if (cfg.notify_condo != null) document.querySelector('#implNotifyCondo').checked = String(cfg.notify_condo) !== 'false';
+    }
+  } catch {}
+}
+document.querySelector('#copyExportIcs')?.addEventListener('click', () => {
+  const el = document.querySelector('#exportIcsUrl');
+  el.select(); document.execCommand('copy');
+  toast('✓ URL copiada — cole no Outlook (Adicionar calendário → Da web)');
+});
+document.querySelector('#saveImplNotify')?.addEventListener('click', async () => {
+  const events = Array.from(document.querySelectorAll('.implEvt:checked')).map(c => c.dataset.ev);
+  const notify_condo = document.querySelector('#implNotifyCondo').checked;
+  await fetch('/api/integrations/impl_notify', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ value: { events: events.join(','), notify_condo }, enabled: true }) });
+  toast('✓ Notificações de implantação salvas');
+});
+document.addEventListener('click', async (e) => {
+  const tb = e.target.closest('.intTest');
+  if (tb) {
+    const key = tb.dataset.int;
+    const orig = tb.textContent; tb.textContent = 'Testando...';
+    try {
+      const r = await fetch('/api/integrations/'+key+'/test', { method:'POST' });
+      const d = await r.json();
+      if (d.ok) alert(`✓ ${key} funcionando\n\n${JSON.stringify(d, null, 2).slice(0,300)}`);
+      else alert(`Falhou: ${d.reason || d.error || JSON.stringify(d)}`);
+    } catch(err) { alert('Erro: ' + err.message); }
+    tb.textContent = orig;
+    return;
+  }
+  const b = e.target.closest('.intSave'); if (!b) return;
+  const key = b.dataset.int;
+  const value = {};
+  document.querySelectorAll(`[data-int="${key}"]`).forEach(i => { if (i.dataset.k && i.value) value[i.dataset.k] = i.value; });
+  if (!Object.keys(value).length) { alert('Preencha ao menos um campo'); return; }
+  await fetch('/api/integrations/'+key, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ value, enabled: true }) });
+  toast('✓ '+key+' salvo');
+  loadIntegrations();
+});
+
+// ---------- API Tokens ----------
+async function loadTokens() {
+  const rows = await fetch('/api/tokens').then(r=>r.ok?r.json():[]);
+  const tbody = document.querySelector('#tokenRows');
+  if (!tbody) return;
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-gray-400 text-center">Nenhum token criado.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(t => `<tr class="border-b border-gray-50" data-id="${t.id}">
+    <td class="py-2 pr-3">${esc(t.name||'')}</td>
+    <td class="pr-3"><code class="text-xs">${esc(t.preview||'')}</code></td>
+    <td class="pr-3 text-xs text-gray-500">${esc(t.scopes||'[*]')}</td>
+    <td class="pr-3 text-xs text-gray-500">${t.last_used_at ? new Date(t.last_used_at).toLocaleString('pt-BR') : 'nunca'}</td>
+    <td class="pr-3"><button class="text-red-600 text-sm revokeTkn">Revogar</button></td>
+  </tr>`).join('');
+  tbody.querySelectorAll('.revokeTkn').forEach(b => b.addEventListener('click', async e => {
+    if (!confirm('Revogar este token? Outros sistemas que o usam vão parar de funcionar.')) return;
+    await fetch('/api/tokens/'+e.target.closest('tr').dataset.id, { method:'DELETE' });
+    loadTokens();
+  }));
+}
+// ---------- WhatsApp Web (Baileys) ----------
+let _waPoll = null;
+async function refreshWhatsAppStatus() {
+  const s = await fetch('/api/whatsapp/status').then(r=>r.ok?r.json():null);
+  if (!s) return;
+  const badge = document.querySelector('#waStatusBadge');
+  const host = document.querySelector('#waQrHost');
+  const me = document.querySelector('#waMe');
+  const help = document.querySelector('#waHelp');
+  if (!badge || !host) return;
+
+  const classMap = { connected: 'chip-success', qr: '', connecting: '', disconnected: '', error: 'chip-danger' };
+  const labelMap = { connected:'Conectado', qr:'Aguardando QR', connecting:'Conectando...', disconnected:'Desconectado', error:'Erro' };
+  badge.className = 'chip ' + (classMap[s.status]||'');
+  badge.textContent = labelMap[s.status] || s.status;
+
+  if (s.status === 'qr' && s.qr) {
+    host.innerHTML = `<img src="${s.qr}" alt="QR" style="width:140px;height:140px"/>`;
+    help.textContent = 'Abra WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho, e aponte a câmera pro QR.';
+  } else if (s.status === 'connected') {
+    host.innerHTML = `<div style="text-align:center;color:#16A34A"><div style="font-size:40px">✓</div><div class="text-xs mt-1">Conectado</div></div>`;
+    help.textContent = 'Pronto — chamados novos tentam enviar via WhatsApp Web automaticamente.';
+    me.textContent = s.me ? `Como: ${s.me}` : '';
+  } else if (s.status === 'connecting') {
+    host.innerHTML = `<div class="text-xs text-gray-400">Conectando...</div>`;
+    help.textContent = 'Conectando ao WhatsApp...';
+  } else {
+    host.innerHTML = `<span class="text-xs text-gray-400">Desconectado</span>`;
+    help.textContent = 'Clique em Conectar para gerar o QR.';
+    me.textContent = '';
+  }
+}
+function startWaPoll() {
+  if (_waPoll) return;
+  refreshWhatsAppStatus();
+  _waPoll = setInterval(refreshWhatsAppStatus, 3000);
+}
+function stopWaPoll() { if (_waPoll) { clearInterval(_waPoll); _waPoll = null; } }
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopWaPoll(); else if (!document.querySelector('#integrationsMain').classList.contains('hidden')) startWaPoll(); });
+
+document.querySelector('#waConnectBtn')?.addEventListener('click', async () => {
+  await fetch('/api/whatsapp/connect', { method:'POST' });
+  startWaPoll();
+});
+document.querySelector('#waDisconnectBtn')?.addEventListener('click', async () => {
+  if (!confirm('Desconectar e apagar a sessão do WhatsApp?')) return;
+  await fetch('/api/whatsapp/disconnect?wipe=1', { method:'POST' });
+  refreshWhatsAppStatus();
+});
+document.querySelector('#waTestBtn')?.addEventListener('click', async () => {
+  const phone = prompt('Enviar teste para qual telefone? (DDD + número)');
+  if (!phone) return;
+  const r = await fetch('/api/whatsapp/send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ phone, message: 'Teste Lavandery 🎉' }) });
+  const d = await r.json();
+  alert(d.sent ? '✓ Mensagem enviada' : ('Falhou: ' + (d.reason||'erro')));
+});
+
+// Microsoft preset + test email
+document.querySelector('#msPreset')?.addEventListener('click', () => {
+  const host = document.querySelector('[data-int="smtp"][data-k="host"]');
+  const port = document.querySelector('[data-int="smtp"][data-k="port"]');
+  if (host) host.value = 'smtp.office365.com';
+  if (port) port.value = '587';
+  toast('Preset Microsoft aplicado — preencha usuário e senha');
+});
+document.querySelector('#smtpTestBtn')?.addEventListener('click', async () => {
+  const to = prompt('Enviar e-mail de teste para qual endereço?');
+  if (!to) return;
+  const r = await fetch('/api/integrations/smtp/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ to }) });
+  const d = await r.json();
+  alert(d.sent ? '✓ Enviado' : ('Falhou: ' + (d.reason || d.error || '')));
+});
+
+document.querySelector('#newTokenBtn')?.addEventListener('click', async () => {
+  const name = prompt('Nome do token (ex: sistema-atendimento):'); if (!name) return;
+  const r = await fetch('/api/tokens', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+  const d = await r.json();
+  prompt('⚠️ COPIE AGORA — o token só aparece uma vez:', d.token);
+  loadTokens();
+});
+
+// ---------- Webhooks ----------
+async function loadWebhooks() {
+  const rows = await fetch('/api/webhooks').then(r=>r.ok?r.json():[]);
+  const tbody = document.querySelector('#webhookRows');
+  if (!tbody) return;
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="4" class="py-4 text-gray-400 text-center">Nenhum webhook.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(w => `<tr class="border-b border-gray-50" data-id="${w.id}">
+    <td class="py-2 pr-3 text-xs break-all max-w-xs">${esc(w.url)}</td>
+    <td class="pr-3 text-xs text-gray-500">${esc(w.events||'[*]')}</td>
+    <td class="pr-3"><span class="chip ${w.active?'chip-success':''}" aria-pressed="true">${w.active?'ativo':'inativo'}</span></td>
+    <td class="pr-3 space-x-1">
+      <button class="chip testWh" style="font-size:11px;min-height:26px">Testar</button>
+      <button class="chip delWh" style="font-size:11px;min-height:26px">Excluir</button>
+    </td>
+  </tr>`).join('');
+  tbody.querySelectorAll('.testWh').forEach(b => b.addEventListener('click', async e => {
+    const r = await fetch('/api/webhooks/'+e.target.closest('tr').dataset.id+'/test', { method:'POST' });
+    const d = await r.json();
+    alert(`Status ${d.status||'erro'}: ${(d.body||d.detail||'').slice(0,300)}`);
+  }));
+  tbody.querySelectorAll('.delWh').forEach(b => b.addEventListener('click', async e => {
+    if (!confirm('Excluir webhook?')) return;
+    await fetch('/api/webhooks/'+e.target.closest('tr').dataset.id, { method:'DELETE' });
+    loadWebhooks();
+  }));
+}
+document.querySelector('#newWebhookBtn')?.addEventListener('click', async () => {
+  const url = prompt('URL de destino (onde seu outro sistema recebe):'); if (!url) return;
+  const events = prompt('Eventos (separados por vírgula, ou * para todos):', '*');
+  const list = events.trim()==='*' ? ['*'] : events.split(',').map(s=>s.trim()).filter(Boolean);
+  await fetch('/api/webhooks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url, events: list }) });
+  loadWebhooks();
+});
+document.querySelectorAll('.tab').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); showTab(a.dataset.tab); }));
+
+// ---------- Autentique import ----------
+let contracts = [];
+async function loadContracts(refresh=false) {
+  const status = document.querySelector('#importStatus');
+  const rows = document.querySelector('#contractsRows');
+  status.textContent = refresh ? 'Reprocessando contratos…' : 'Buscando contratos no Autentique…';
+  rows.innerHTML = '';
+  try {
+    const r = await fetch('/api/autentique/contracts' + (refresh?'?refresh=1':''));
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    contracts = data.data || [];
+    status.textContent = `${contracts.length} contratos encontrados (de ${data.total||contracts.length} no Autentique).`;
+    renderContracts();
+  } catch (e) {
+    status.innerHTML = `<span class="text-red-600">Erro: ${e.message}</span> — verifique se o backend está rodando (<code>npm start</code> em <code>/server</code>).`;
+  }
+}
+function renderContracts() {
+  const rows = document.querySelector('#contractsRows');
+  if (!contracts.length) { rows.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-gray-400">Nenhum contrato no Autentique.</td></tr>`; return; }
+  rows.innerHTML = contracts.map((c, i) => {
+    const x = c.extracted || {};
+    return `<tr class="border-b border-gray-50 align-top" data-i="${i}">
+      <td class="py-3 pr-3"><input type="checkbox" class="sel" checked/></td>
+      <td class="pr-3"><div class="font-medium">${escapeHtml(c.name||'(sem nome)')}</div><div class="text-xs text-gray-400">${c.id.slice(0,8)}…</div></td>
+      <td class="pr-3"><input class="input py-2 min-h-0" style="min-height:36px" data-f="name" value="${escapeHtml(x.name||c.name||'')}"/></td>
+      <td class="pr-3"><input class="input py-2 min-h-0" style="min-height:36px" data-f="address" value="${escapeHtml(x.address||'')}"/></td>
+      <td class="pr-3"><input class="input py-2 min-h-0" style="min-height:36px;width:130px" data-f="city" value="${escapeHtml((x.city||'') + (x.state?'/'+x.state:''))}"/></td>
+      <td class="pr-3"><input class="input py-2 min-h-0" style="min-height:36px;width:100px" data-f="cep" value="${escapeHtml(x.cep||'')}"/></td>
+      <td class="pr-3 text-center"><input type="number" min="0" class="input py-2 min-h-0 text-center" style="min-height:36px;width:70px" data-f="washers" value="${x.washers||0}"/></td>
+      <td class="pr-3 text-center"><input type="number" min="0" class="input py-2 min-h-0 text-center" style="min-height:36px;width:70px" data-f="dryers" value="${x.dryers||0}"/></td>
+    </tr>`;
+  }).join('');
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+document.querySelector('#refreshImport')?.addEventListener('click', () => loadContracts(true));
+document.querySelector('#selAll')?.addEventListener('change', (e) => {
+  document.querySelectorAll('#contractsRows .sel').forEach(cb => cb.checked = e.target.checked);
+});
+// ---------- Condomínios CRUD ----------
+let allCondos = [];
+async function loadCondos() {
+  const status = document.querySelector('#condoStatus');
+  status.textContent = 'Carregando...';
+  const r = await fetch('/api/condominiums');
+  if (!r.ok) { status.textContent = 'Erro ao carregar condomínios.'; return; }
+  allCondos = await r.json();
+  renderCondos();
+  status.textContent = `${allCondos.length} condomínios`;
+}
+function renderCondos() {
+  const q = (document.querySelector('#condoSearch').value||'').toLowerCase();
+  const tbody = document.querySelector('#condoRows');
+  const list = q ? allCondos.filter(c => (c.name+' '+c.city+' '+(c.address||'')).toLowerCase().includes(q)) : allCondos;
+  tbody.innerHTML = list.map(c => `
+    <tr class="border-b border-gray-50 align-top cursor-pointer hover:bg-gray-50 condoRow" data-id="${c.id}">
+      <td class="py-3 pr-3">
+        <div class="font-medium">${esc(c.name)}</div>
+        <div class="text-xs text-gray-500">${esc(c.contract_source==='autentique'?'Autentique':'Manual')}${c.lat?' · 📍':''}</div>
+      </td>
+      <td class="pr-3 text-sm">${esc(c.address||'—')}</td>
+      <td class="pr-3 text-sm">${esc(c.city||'—')}</td>
+      <td class="pr-3 text-sm">${esc(c.cep||'—')}</td>
+      <td class="pr-3 text-sm">${esc(c.cnpj||'—')}</td>
+      <td class="pr-3 text-center">${c.washers||0}</td>
+      <td class="pr-3 text-center">${c.dryers||0}</td>
+      <td class="pr-3 text-xs text-gray-500">${esc(c.maintenance_label||'—')}</td>
+      <td class="pr-3 text-xs text-brand">Abrir →</td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.condoRow').forEach(r => r.addEventListener('click', () => openCondoDrawer(r.dataset.id)));
+}
+function esc(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+document.querySelector('#condoSearch')?.addEventListener('input', renderCondos);
+document.querySelector('#newCondoBtn')?.addEventListener('click', async () => {
+  const name = prompt('Nome do condomínio:');
+  if (!name) return;
+  const r = await fetch('/api/condominiums', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+  const d = await r.json();
+  loadCondos();
+  openCondoDrawer(d.id);
+});
+
+// ---------- Schedule ----------
+let _allTechs = [];
+async function loadSchedule() {
+  _allTechs = await (await fetch('/api/technicians')).json();
+  const techMap = Object.fromEntries(_allTechs.map(t=>[t.id,t.name]));
+  // Render tech picker with all selected by default
+  const picker = document.querySelector('#techPicker');
+  picker.innerHTML = _allTechs.map(t => `<label class="chip cursor-pointer"><input type="checkbox" value="${t.id}" checked class="mr-1"/> ${esc(t.name)}</label>`).join('');
+  // Fetch all schedule rows
+  const r = await fetch('/api/schedule?from=' + (document.querySelector('#schYear')?.value || '2026') + '-01-01');
+  const rows = r.ok ? await r.json() : [];
+  // Summary counters
+  const byTech = {}; rows.forEach(x => byTech[x.technician_id] = (byTech[x.technician_id]||0)+1);
+  const summary = _allTechs.map(t => `${esc(t.name)}: ${byTech[t.id]||0}`).join(' · ');
+  const status = document.querySelector('#schStatus');
+  status.textContent = rows.length ? `${rows.length} visitas agendadas — ${summary}` : '';
+
+  const tbody = document.querySelector('#schRows');
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-gray-400">Nenhuma visita agendada. Clique em "Gerar agenda do ano".</td></tr>`; return; }
+  tbody.innerHTML = rows.map(r => `<tr class="border-b border-gray-50 hover:bg-gray-50" data-sch='${encodeURIComponent(JSON.stringify(r))}'>
+    <td class="py-2 pr-3 whitespace-nowrap">${new Date(r.date).toLocaleDateString('pt-BR')}</td>
+    <td class="pr-3">${r.scheduled_time||'—'}</td>
+    <td class="pr-3">${esc(r.condo_name||r.condo_id)}</td>
+    <td class="pr-3">${esc(techMap[r.technician_id]||r.technician_id)}</td>
+    <td class="pr-3">${esc(r.type||'—')}</td>
+    <td class="pr-3 text-right">
+      <button class="chip mr-1 editSch" style="font-size:11px;min-height:26px">Reagendar</button>
+      <button class="text-red-600 text-sm cancSch">Cancelar</button>
+    </td>
+  </tr>`).join('');
+  tbody.querySelectorAll('.editSch').forEach(b => b.addEventListener('click', e => {
+    const r = JSON.parse(decodeURIComponent(e.target.closest('tr').dataset.sch));
+    openScheduleModal(r);
+  }));
+  tbody.querySelectorAll('.cancSch').forEach(b => b.addEventListener('click', e => {
+    const r = JSON.parse(decodeURIComponent(e.target.closest('tr').dataset.sch));
+    if (!confirm('Cancelar esta visita?')) return;
+    fetch('/api/schedule/'+r.id, { method:'DELETE' }).then(()=>loadSchedule());
+  }));
+}
+document.querySelector('#newVisitBtn')?.addEventListener('click', () => openScheduleModal(null));
+window.delSchedule = async (id) => { await fetch('/api/schedule/'+id, { method:'DELETE' }); loadSchedule(); };
+document.querySelector('#schGenerate')?.addEventListener('click', async () => {
+  const status = document.querySelector('#schStatus');
+  const year = parseInt(document.querySelector('#schYear').value, 10);
+  const defaultIntervalMonths = parseInt(document.querySelector('#schDefault').value, 10);
+  const technicianIds = Array.from(document.querySelectorAll('#techPicker input:checked')).map(i=>i.value);
+  if (!technicianIds.length) { alert('Selecione ao menos um técnico'); return; }
+  if (!confirm(`Gerar agenda de ${year}? Isso apaga visitas já geradas do ano e recria.`)) return;
+  status.textContent = 'Gerando agenda anual...';
+  const r = await fetch('/api/schedule/generate-annual', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ year, defaultIntervalMonths, technicianIds, clear: true }) });
+  const data = await r.json();
+  if (!r.ok) { status.innerHTML = `<span class="text-red-600">Erro: ${data.detail||data.error}</span>`; return; }
+  status.textContent = `✓ ${data.generated} visitas geradas para ${data.year}.`;
+  loadSchedule();
+});
+
+// ---------- Agenda Geral (iCal) ----------
+let _calCursor = new Date();
+_calCursor.setDate(1);
+const CAL_PROVIDER_COLORS = { google:'#4285F4', microsoft:'#0078D4', internal:'#533C9D', other:'#94A3B8' };
+const CAL_PROVIDER_LABEL = { google:'Google', microsoft:'Microsoft', internal:'Manutenção', other:'Externo' };
+
+async function loadCalendar() {
+  const y = _calCursor.getFullYear(), m = _calCursor.getMonth();
+  const first = new Date(y, m, 1);
+  const last = new Date(y, m+1, 0);
+  // range da grade: inclui dias do mês anterior/próximo que preenchem as semanas
+  const startDay = first.getDay();
+  const rangeStart = new Date(first); rangeStart.setDate(1 - startDay);
+  const rangeEnd = new Date(last); rangeEnd.setDate(last.getDate() + (6 - last.getDay()));
+  const from = rangeStart.toISOString().slice(0,10);
+  const to = rangeEnd.toISOString().slice(0,10);
+
+  document.querySelector('#calTitle').textContent = first.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^./, c=>c.toUpperCase());
+
+  const r = await fetch(`/api/calendar/events?from=${from}&to=${to}`);
+  const data = r.ok ? await r.json() : { events:[], errors:[] };
+
+  renderCalGrid(rangeStart, rangeEnd, data.events, first);
+  renderCalList(data.events);
+}
+
+function renderCalGrid(rangeStart, rangeEnd, events, currentMonth) {
+  const host = document.querySelector('#calGrid');
+  const days = [];
+  const cur = new Date(rangeStart);
+  while (cur <= rangeEnd) { days.push(new Date(cur)); cur.setDate(cur.getDate()+1); }
+  const todayStr = new Date().toISOString().slice(0,10);
+
+  const byDay = {};
+  events.forEach(e => {
+    const k = new Date(e.start).toISOString().slice(0,10);
+    (byDay[k] = byDay[k] || []).push(e);
+  });
+
+  const header = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => `<div style="padding:10px 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-500);background:var(--ink-50);border-bottom:1px solid var(--ink-200);text-align:center">${d}</div>`).join('');
+
+  const cells = days.map(d => {
+    const k = d.toISOString().slice(0,10);
+    const isCurrentMonth = d.getMonth() === currentMonth.getMonth();
+    const isToday = k === todayStr;
+    const dayEvents = byDay[k] || [];
+    const visibleCount = 3;
+    return `<div style="border-right:1px solid var(--ink-100);border-bottom:1px solid var(--ink-100);min-height:100px;padding:8px;background:${isCurrentMonth?'#fff':'var(--ink-50)'};${isToday?'background:var(--brand-50)':''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:${isToday?'700':'500'};color:${isCurrentMonth?(isToday?'var(--brand-700)':'var(--ink-800)'):'var(--ink-400)'}">${d.getDate()}</span>
+        ${dayEvents.length ? `<span class="mono" style="font-size:10px;color:var(--ink-400)">${dayEvents.length}</span>` : ''}
+      </div>
+      ${dayEvents.slice(0, visibleCount).map(e => `
+        <div title="${esc(e.title||'')}" style="font-size:11px;color:#fff;background:${CAL_PROVIDER_COLORS[e.provider]||CAL_PROVIDER_COLORS.other};padding:3px 6px;border-radius:4px;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${esc(e.title || '(sem título)')}
+        </div>
+      `).join('')}
+      ${dayEvents.length > visibleCount ? `<div style="font-size:10px;color:var(--ink-500);font-weight:500">+ ${dayEvents.length - visibleCount} mais</div>` : ''}
+    </div>`;
+  }).join('');
+
+  host.style.gridTemplateColumns = 'repeat(7, 1fr)';
+  host.style.gridAutoRows = 'auto';
+  host.innerHTML = header + cells;
+}
+function renderCalList(events) {
+  const now = Date.now();
+  const in7 = now + 7*864e5;
+  const upcoming = events.filter(e => {
+    const t = new Date(e.start).getTime(); return t >= now && t <= in7;
+  });
+  const host = document.querySelector('#calList');
+  if (!upcoming.length) { host.innerHTML = '<div class="subtle" style="padding:20px">Sem eventos nos próximos 7 dias.</div>'; return; }
+  host.innerHTML = upcoming.map(e => {
+    const d = new Date(e.start);
+    return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--ink-100)">
+      <div style="text-align:center;width:48px;flex-shrink:0">
+        <div style="font-size:10px;color:var(--ink-400);text-transform:uppercase">${d.toLocaleString('pt-BR',{month:'short'})}</div>
+        <div style="font-size:20px;font-weight:700;color:var(--ink-900)">${d.getDate()}</div>
+        <div style="font-size:10px;color:var(--ink-500)">${e.allDay?'Dia todo':d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500">${esc(e.title||'(sem título)')}</div>
+        ${e.location ? `<div style="font-size:11px;color:var(--ink-500);margin-top:2px">📍 ${esc(e.location)}</div>` : ''}
+      </div>
+      <span class="pill ${e.provider==='internal'?'brand':'neutral'}" style="background:${CAL_PROVIDER_COLORS[e.provider]||CAL_PROVIDER_COLORS.other}15;color:${CAL_PROVIDER_COLORS[e.provider]||CAL_PROVIDER_COLORS.other}">${CAL_PROVIDER_LABEL[e.provider]||e.provider}</span>
+    </div>`;
+  }).join('');
+}
+document.querySelector('#calPrevBtn')?.addEventListener('click', () => { _calCursor.setMonth(_calCursor.getMonth()-1); loadCalendar(); });
+document.querySelector('#calNextBtn')?.addEventListener('click', () => { _calCursor.setMonth(_calCursor.getMonth()+1); loadCalendar(); });
+document.querySelector('#calTodayBtn')?.addEventListener('click', () => { _calCursor = new Date(); _calCursor.setDate(1); loadCalendar(); });
+document.querySelector('#calRefreshBtn')?.addEventListener('click', loadCalendar);
+
+// ---------- Entrega de Equipamentos ----------
+const ED_UNIT = 53000;
+const BRL = (v) => 'R$ ' + (v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function maskCpf(v){ return (v||'').replace(/\D/g,'').slice(0,11).replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2'); }
+function maskPhone(v){ const d=(v||'').replace(/\D/g,'').slice(0,11); if(d.length<=10) return d.replace(/(\d{2})(\d{4})(\d{0,4})/,'($1) $2-$3'); return d.replace(/(\d{2})(\d{5})(\d{0,4})/,'($1) $2-$3'); }
+
+async function loadDeliveries() {
+  const [list, stats] = await Promise.all([
+    fetch('/api/equipment-deliveries?' + new URLSearchParams({
+      q: document.querySelector('#edQ')?.value||'',
+      status: document.querySelector('#edStatus')?.value||'',
+      from: document.querySelector('#edFrom')?.value||'',
+      to: document.querySelector('#edTo')?.value||'',
+    })).then(r=>r.ok?r.json():[]),
+    fetch('/api/equipment-deliveries/stats/summary').then(r=>r.ok?r.json():null),
+  ]);
+  renderEdKpis(stats);
+  renderEdRows(list);
+}
+function renderEdKpis(s) {
+  if (!s) { document.querySelector('#edKpis').innerHTML=''; return; }
+  const items = [
+    ['Entregas realizadas', s.total, '#533C9D', 'finalizadas'],
+    ['Em andamento', s.in_progress, '#F59E0B', 'rascunhos abertos'],
+    ['Conjuntos entregues', s.total_conjuntos, '#10B981', 'total acumulado'],
+    ['Valor entregue', BRL(s.total_value), '#9C83D8', 'soma de finalizadas'],
+    ['Entregas no mês', s.this_month, '#3B82F6', 'neste mês'],
+  ];
+  document.querySelector('#edKpis').innerHTML = items.map(([l,v,c,sub])=>`
+    <div class="stat-card" style="--accent:${c}">
+      <div class="stat-label">${l}</div>
+      <div class="stat-value mini">${v}</div>
+      <div class="stat-sub">${sub}</div>
+    </div>`).join('');
+}
+function renderEdRows(rows) {
+  const tbody = document.querySelector('#edRows');
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--ink-400)">Nenhuma entrega encontrada</td></tr>`; return; }
+  tbody.innerHTML = rows.map(r => `
+    <tr data-id="${r.id}" class="edRow">
+      <td><code class="mono">${r.id.slice(-8).toUpperCase()}</code></td>
+      <td><b>${esc(r.condo_name||'—')}</b></td>
+      <td>${esc(r.responsible_name||'—')}</td>
+      <td>${r.delivery_date ? new Date(r.delivery_date).toLocaleDateString('pt-BR') : '—'} ${r.delivery_time||''}</td>
+      <td style="text-align:center">${r.conjuntos_qty||0}</td>
+      <td style="text-align:right">${BRL(r.total_value)}</td>
+      <td><span class="pill ${r.status==='finalizada'?'success':'warning'}">${r.status==='finalizada'?'Finalizada':'Em andamento'}</span></td>
+      <td class="subtle">${esc(r.created_by||'—')}</td>
+      <td>
+        ${r.status==='finalizada' ? `<a href="/api/equipment-deliveries/${r.id}/pdf" target="_blank" class="card-action">📄 PDF</a>` : ''}
+        <span class="card-action edOpen" data-id="${r.id}" style="margin-left:8px;cursor:pointer">Abrir →</span>
+      </td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.edOpen').forEach(el => el.addEventListener('click', (e) => { e.stopPropagation(); openDeliveryDrawer(el.dataset.id); }));
+  tbody.querySelectorAll('.edRow').forEach(el => el.addEventListener('click', () => openDeliveryDrawer(el.dataset.id)));
+}
+document.querySelector('#edApply')?.addEventListener('click', loadDeliveries);
+document.querySelector('#edQ')?.addEventListener('input', debounce(loadDeliveries, 350));
+function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+document.querySelector('#newDeliveryFullBtn')?.addEventListener('click', () => openDeliveryDrawer(null));
+
+async function openDeliveryDrawer(existingId) {
+  const [condos, existing] = await Promise.all([
+    fetch('/api/condominiums').then(r=>r.ok?r.json():[]),
+    existingId ? fetch('/api/equipment-deliveries/'+existingId).then(r=>r.ok?r.json():null) : null,
+  ]);
+  const d = existing || { conjuntos_qty: 0, total_value: 0, unit_value: ED_UNIT, delivery_date: new Date().toISOString().slice(0,10), delivery_time: new Date().toTimeString().slice(0,5) };
+  const locked = d.status === 'finalizada';
+  const drawer = document.querySelector('#edDrawer');
+  drawer.innerHTML = `
+    <div class="drawer-header">
+      <div>
+        <div class="font-semibold text-lg tracking-tight">${locked ? 'Entrega finalizada' : (existingId ? 'Entrega em andamento' : 'Nova entrega de equipamentos')}</div>
+        <div class="text-xs text-gray-500">${d.id ? 'Protocolo '+d.id.slice(-8).toUpperCase() : 'Preencha todos os campos e assine'}</div>
+      </div>
+      <button class="text-gray-500 text-xl closeBtn">×</button>
+    </div>
+    <div class="drawer-body">
+      ${locked ? `<div class="card-new" style="padding:14px;background:var(--ink-50);border-color:var(--ink-300)"><b>🔒 Entrega finalizada</b> · não pode ser editada. ${d.pdf_url ? `<a href="${d.pdf_url}" target="_blank" style="color:var(--brand-700)">Ver PDF salvo</a>` : ''}</div>` : ''}
+
+      <div class="section-title">Contratada</div>
+      <div class="card-new" style="padding:14px;background:var(--brand-50)">
+        <div style="font-weight:700;color:var(--brand-700)">LAVANDERY</div>
+        <div class="subtle" style="font-size:12px">INOVA TECNOLOGIA E SERVIÇOS E REPRESENTAÇÃO LTDA.</div>
+        <div class="subtle" style="font-size:12px">CNPJ: 45.061.358/0001-62 — campo fixo, somente leitura</div>
+      </div>
+
+      <div class="section-title">Condomínio (CONTRATANTE)</div>
+      <label class="label-new">Condomínio</label>
+      <select id="edCondo" class="select-new" ${locked?'disabled':''}>
+        <option value="">Selecione...</option>
+        ${condos.map(c => `<option value="${c.id}"${d.condo_id===c.id?' selected':''}>${esc(c.name)}${c.city?' — '+esc(c.city):''}</option>`).join('')}
+      </select>
+      <div class="grid grid-cols-2 gap-3 mt-3">
+        <div><label class="label-new">CNPJ</label><input id="edCnpj" class="input-new" value="${esc(d.condo_cnpj||'')}" ${locked?'disabled':''}/></div>
+        <div><label class="label-new">Endereço</label><input id="edAddress" class="input-new" value="${esc(d.condo_address||'')}" ${locked?'disabled':''}/></div>
+      </div>
+
+      <div class="section-title">Responsável pelo recebimento</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div style="grid-column:1/-1"><label class="label-new">Nome completo</label><input id="edRespName" class="input-new" value="${esc(d.responsible_name||'')}" ${locked?'disabled':''}/></div>
+        <div><label class="label-new">CPF</label><input id="edCpf" class="input-new" value="${esc(d.responsible_cpf||'')}" placeholder="000.000.000-00" ${locked?'disabled':''}/></div>
+        <div><label class="label-new">Telefone</label><input id="edPhone" class="input-new" value="${esc(d.responsible_phone||'')}" placeholder="(11) 98765-4321" ${locked?'disabled':''}/></div>
+      </div>
+
+      <div class="section-title">Dados da entrega</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="label-new">Data</label><input id="edDate" type="date" class="input-new" value="${d.delivery_date||''}" ${locked?'disabled':''}/></div>
+        <div><label class="label-new">Hora</label><input id="edTime" type="time" class="input-new" value="${d.delivery_time||''}" ${locked?'disabled':''}/></div>
+      </div>
+      <label class="label-new" style="margin-top:12px">Local da instalação / recebimento</label>
+      <input id="edLocation" class="input-new" value="${esc(d.delivery_location||'')}" placeholder="Ex: Área de serviço, térreo" ${locked?'disabled':''}/>
+
+      <div class="section-title">Equipamentos</div>
+      <div class="card-new" style="padding:14px;background:var(--bg)">
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div><label class="label-new">Quantidade de conjuntos</label><input id="edQty" type="number" min="0" class="input-new" style="width:120px;text-align:center" value="${d.conjuntos_qty||0}" ${locked?'disabled':''}/></div>
+          <div class="subtle" style="font-size:12px;padding:10px 0">Conjunto = 1 lavadora + 1 secadora · Marca: <b style="color:var(--ink-900)">Speed Queen</b> · Valor unitário: <b style="color:var(--ink-900)">${BRL(ED_UNIT)}</b></div>
+        </div>
+        <div style="margin-top:12px;padding:12px;background:var(--brand-50);border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--brand-700)">Valor total</span>
+          <span id="edTotal" style="font-size:22px;font-weight:700;color:var(--brand-700)">${BRL(d.total_value||0)}</span>
+        </div>
+      </div>
+
+      <div class="section-title">Condição dos equipamentos</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap">
+        <label class="flex items-center gap-2"><input type="checkbox" id="edCondNew" ${d.condition_new?'checked':''} ${locked?'disabled':''} style="width:16px;height:16px;accent-color:var(--brand-700)"/> Novos</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="edCondNoDamage" ${d.condition_no_damage?'checked':''} ${locked?'disabled':''} style="width:16px;height:16px;accent-color:var(--brand-700)"/> Sem avarias aparentes</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="edCondTested" ${d.condition_tested?'checked':''} ${locked?'disabled':''} style="width:16px;height:16px;accent-color:var(--brand-700)"/> Testados</label>
+      </div>
+
+      <div class="section-title">Observações (opcional)</div>
+      <textarea id="edNotes" class="textarea-new" rows="2" ${locked?'disabled':''} placeholder="Ex: equipamento X com lacre quebrado, reposto no local...">${esc(d.notes||'')}</textarea>
+
+      <div class="section-title">Assinatura digital do responsável</div>
+      <div style="border:1px dashed var(--ink-300);border-radius:12px;background:#fff;padding:8px;position:relative">
+        <canvas id="edSig" style="width:100%;height:180px;touch-action:none;border-radius:8px"></canvas>
+        <div id="edSigHint" style="position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-400);font-size:13px;pointer-events:none">Assine aqui</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <span class="subtle" style="font-size:12px">${esc(d.responsible_name||'(preencha o nome acima)')}</span>
+        <button class="btn-new ghost sm" id="edSigClear" ${locked?'disabled':''}>Limpar</button>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+        ${locked ? `
+          <a href="/api/equipment-deliveries/${d.id}/pdf" target="_blank" class="btn-new brand" style="flex:1;min-width:180px">📄 Ver PDF do termo</a>
+        ` : `
+          <button class="btn-new ghost" id="edSaveBtn" style="flex:1;min-width:140px">Salvar rascunho</button>
+          <button class="btn-new brand" id="edFinalizeBtn" style="flex:2;min-width:180px">Finalizar entrega</button>
+        `}
+      </div>
+      ${!locked && d.id ? `<div style="margin-top:12px;text-align:right"><button class="btn-new danger-ghost sm" id="edDeleteBtn">Excluir rascunho</button></div>` : ''}
+
+      <div id="edErrors" style="margin-top:12px"></div>
+    </div>`;
+
+  // Abrir drawer
+  document.querySelector('#overlay').classList.add('show');
+  drawer.classList.add('show');
+
+  // Init signature pad
+  const canvas = drawer.querySelector('#edSig');
+  const hint = drawer.querySelector('#edSigHint');
+  const ratio = Math.max(window.devicePixelRatio||1, 1);
+  requestAnimationFrame(() => {
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    canvas.getContext('2d').scale(ratio, ratio);
+    const pad = new SignaturePad(canvas, { backgroundColor:'rgba(255,255,255,0)', penColor:'#111827' });
+    if (d.signature_data_url) { pad.fromDataURL(d.signature_data_url); hint.remove(); }
+    if (locked) pad.off();
+    pad.addEventListener('beginStroke', () => { if (hint) hint.remove(); });
+    drawer._sigPad = pad;
+    drawer._getSig = () => pad.isEmpty() ? null : pad.toDataURL('image/png');
+    drawer.querySelector('#edSigClear')?.addEventListener('click', () => { pad.clear(); if (!drawer.querySelector('#edSigHint')) { const h=document.createElement('div'); h.id='edSigHint'; h.style.cssText='position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-400);font-size:13px;pointer-events:none'; h.textContent='Assine aqui'; canvas.parentElement.appendChild(h);} });
+  });
+
+  // Auto-preencher condo
+  drawer.querySelector('#edCondo').addEventListener('change', async (e) => {
+    const cid = e.target.value; if (!cid) return;
+    const c = condos.find(x => x.id === cid);
+    if (c) {
+      drawer.querySelector('#edCnpj').value = c.cnpj || '';
+      drawer.querySelector('#edAddress').value = [c.address, c.city, c.cep].filter(Boolean).join(', ');
+    }
+  });
+  // Cálculo automático
+  const recalc = () => {
+    const qty = parseInt(drawer.querySelector('#edQty').value,10) || 0;
+    drawer.querySelector('#edTotal').textContent = BRL(qty * ED_UNIT);
+  };
+  drawer.querySelector('#edQty').addEventListener('input', recalc);
+  // Máscaras
+  drawer.querySelector('#edCpf').addEventListener('input', e => e.target.value = maskCpf(e.target.value));
+  drawer.querySelector('#edPhone').addEventListener('input', e => e.target.value = maskPhone(e.target.value));
+
+  drawer.querySelector('.closeBtn').addEventListener('click', closeAll);
+
+  const collect = () => ({
+    condo_id: drawer.querySelector('#edCondo').value || null,
+    condo_cnpj: drawer.querySelector('#edCnpj').value,
+    condo_address: drawer.querySelector('#edAddress').value,
+    condo_name: drawer.querySelector('#edCondo').options[drawer.querySelector('#edCondo').selectedIndex]?.text?.split(' — ')[0] || null,
+    responsible_name: drawer.querySelector('#edRespName').value,
+    responsible_cpf: drawer.querySelector('#edCpf').value,
+    responsible_phone: drawer.querySelector('#edPhone').value,
+    delivery_date: drawer.querySelector('#edDate').value,
+    delivery_time: drawer.querySelector('#edTime').value,
+    delivery_location: drawer.querySelector('#edLocation').value,
+    conjuntos_qty: parseInt(drawer.querySelector('#edQty').value,10) || 0,
+    unit_value: ED_UNIT,
+    condition_new: drawer.querySelector('#edCondNew').checked,
+    condition_no_damage: drawer.querySelector('#edCondNoDamage').checked,
+    condition_tested: drawer.querySelector('#edCondTested').checked,
+    notes: drawer.querySelector('#edNotes').value,
+    signature_data_url: drawer._getSig?.() || null,
+  });
+
+  const save = async () => {
+    const payload = collect();
+    let id = existingId;
+    if (!id) {
+      const r = await fetch('/api/equipment-deliveries', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const j = await r.json(); id = j.id;
+    } else {
+      await fetch('/api/equipment-deliveries/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    }
+    return id;
+  };
+
+  drawer.querySelector('#edSaveBtn')?.addEventListener('click', async () => {
+    await save(); toast('✓ Rascunho salvo'); loadDeliveries();
+  });
+  drawer.querySelector('#edFinalizeBtn')?.addEventListener('click', async () => {
+    const id = await save();
+    const r = await fetch('/api/equipment-deliveries/'+id+'/finalize', { method:'POST' });
+    const j = await r.json();
+    const errBox = drawer.querySelector('#edErrors');
+    if (!r.ok) {
+      errBox.innerHTML = `<div class="card-new" style="border-color:var(--danger);background:#FEF2F2;color:var(--danger);padding:12px;font-size:13px"><b>Não foi possível finalizar:</b><ul style="margin:6px 0 0 20px">${(j.details||[j.error||'erro']).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
+      return;
+    }
+    errBox.innerHTML = `<div class="card-new" style="border-color:var(--success);background:#F0FDF4;color:var(--success);padding:12px;font-size:13px"><b>✓ Entrega finalizada com sucesso!</b> PDF gerado e armazenado.</div>`;
+    toast('✓ Entrega finalizada');
+    setTimeout(()=>{
+      closeAll();
+      loadDeliveries();
+      window.open(j.inline_pdf, '_blank');
+    }, 1200);
+  });
+  drawer.querySelector('#edDeleteBtn')?.addEventListener('click', async () => {
+    if (!confirm('Excluir este rascunho?')) return;
+    await fetch('/api/equipment-deliveries/'+existingId, { method:'DELETE' });
+    closeAll(); loadDeliveries();
+  });
+}
+
+// ---------- Implantações ----------
+const IMPL_STATUS_LABEL = { agendada:'Agendada', em_andamento:'Em andamento', concluida:'Concluída', cancelada:'Cancelada' };
+const IMPL_STATUS_PILL = { agendada:'brand', em_andamento:'warning', concluida:'success', cancelada:'neutral' };
+let _implFilter = '';
+
+async function loadImplantations() {
+  const qs = _implFilter ? '?status='+_implFilter : '';
+  const [rows, summary] = await Promise.all([
+    fetch('/api/implantations'+qs).then(r=>r.ok?r.json():[]),
+    fetch('/api/implantations/stats/summary').then(r=>r.ok?r.json():null),
+  ]);
+  renderImplKpis(summary);
+  renderImplSLA(summary);
+  renderImplTopDelays(summary);
+  renderImplStats(rows);
+  renderImplRows(rows);
+}
+function renderImplKpis(s) {
+  if (!s) { document.querySelector('#implKpis').innerHTML = ''; return; }
+  const items = [
+    ['Total', s.total, 'implantations', '#533C9D', 'implantações cadastradas'],
+    ['Em andamento', s.em_andamento||0, 'implantations', '#654ABA', 'operação ativa'],
+    ['Concluídas', s.concluida||0, 'implantations', '#10B981', 'já operando'],
+    ['Atrasadas', s.atrasadas||0, 'implantations', s.atrasadas ? '#EF4444' : '#10B981', s.atrasadas ? 'passaram do SLA' : 'tudo no prazo'],
+    ['Tempo médio', s.avg_days != null ? s.avg_days + 'd' : '—', 'implantations', '#3B82F6', 'assinatura até conclusão'],
+    ['% no prazo', s.pct_on_time != null ? s.pct_on_time + '%' : '—', 'implantations', '#9C83D8', 'concluídas dentro do SLA'],
+  ];
+  document.querySelector('#implKpis').innerHTML = items.map(([l,v,tab,accent,sub])=>`
+    <div class="stat-card" style="--accent:${accent}">
+      <div class="stat-label">${l}</div>
+      <div class="stat-value mini">${v}</div>
+      <div class="stat-sub">${sub}</div>
+    </div>`).join('');
+}
+let _slaChart;
+function renderImplSLA(s) {
+  if (!s) return;
+  const within = s.within_deadline || 0;
+  const out = s.out_of_deadline || 0;
+  const overdue = s.atrasadas || 0;
+  const pending = Math.max(0, (s.agendada||0) + (s.em_andamento||0) - overdue);
+  const data = [within, out, overdue, pending];
+  const labels = ['Concluídas no prazo', 'Concluídas fora do prazo', 'Atrasadas (em andamento)', 'Em andamento no prazo'];
+  const colors = ['#10B981', '#F59E0B', '#EF4444', '#A292D5'];
+  if (_slaChart) _slaChart.destroy();
+  _slaChart = new Chart(document.getElementById('chartSLAPie').getContext('2d'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors }] },
+    options: { responsive:true, maintainAspectRatio:false, cutout:'65%', plugins:{ legend:{ display:false } } }
+  });
+  document.querySelector('#implSLALegend').innerHTML = labels.map((l,i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:10px;height:10px;border-radius:999px;background:${colors[i]}"></span>${l}
+      </div>
+      <b>${data[i]}</b>
+    </div>`).join('');
+}
+function renderImplTopDelays(s) {
+  if (!s) return;
+  const host = document.querySelector('#implTopDelays');
+  const delays = (s.top_delays||[]).filter(d => d.avg_duration || d.pending_delayed);
+  if (!delays.length) { host.innerHTML = '<div class="subtle">Sem atrasos identificados ainda 🎉</div>'; return; }
+  const max = Math.max(...delays.map(d => (d.avg_duration||0) + (d.pending_delayed||0)*5), 1);
+  host.innerHTML = delays.map(d => {
+    const w = Math.round(((d.avg_duration||0) + (d.pending_delayed||0)*5) / max * 100);
+    return `<div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span>${esc(d.title||d.stage)}</span>
+        <span class="mono subtle">${d.pending_delayed||0} pendente · ${d.avg_duration ? d.avg_duration.toFixed(1)+'d média' : ''}</span>
+      </div>
+      <div style="height:6px;background:var(--ink-100);border-radius:3px;overflow:hidden">
+        <div style="width:${w}%;background:linear-gradient(90deg,var(--warning),var(--danger));height:100%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderImplStats(rows) {
+  const all = rows;
+  const counts = { total: all.length, agendada: 0, em_andamento: 0, concluida: 0, atrasadas: 0 };
+  const today = new Date().toISOString().slice(0,10);
+  all.forEach(r => { counts[r.status] = (counts[r.status]||0)+1; if ((r.status==='agendada'||r.status==='em_andamento') && r.target_date && r.target_date < today) counts.atrasadas++; });
+  document.querySelector('#implStats').innerHTML = `
+    <div style="display:flex;gap:20px;font-size:13px;flex-wrap:wrap">
+      <span class="subtle">Total: <b style="color:var(--ink-900)">${counts.total}</b></span>
+      <span class="subtle">Agendadas: <b style="color:var(--brand-700)">${counts.agendada||0}</b></span>
+      <span class="subtle">Em andamento: <b style="color:var(--warning)">${counts.em_andamento||0}</b></span>
+      <span class="subtle">Concluídas: <b style="color:var(--success)">${counts.concluida||0}</b></span>
+      <span class="subtle">Atrasadas: <b style="color:var(--danger)">${counts.atrasadas}</b></span>
+    </div>`;
+  const bad = document.querySelector('#sidebarImplBadge');
+  if (bad) {
+    const pending = (counts.agendada||0) + (counts.em_andamento||0);
+    if (pending > 0) { bad.textContent = pending; bad.style.display = 'inline-grid'; } else bad.style.display = 'none';
+  }
+}
+function renderImplRows(rows) {
+  const tbody = document.querySelector('#implRows');
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:36px;color:var(--ink-400)">Nenhuma implantação neste filtro</td></tr>`; return; }
+  const today = new Date().toISOString().slice(0,10);
+  tbody.innerHTML = rows.map(r => {
+    const pct = r.total ? Math.round((r.done/r.total)*100) : 0;
+    const atrasada = (r.status==='agendada'||r.status==='em_andamento') && r.target_date && r.target_date < today;
+    const pillCls = atrasada ? 'danger' : IMPL_STATUS_PILL[r.status] || 'neutral';
+    const pillTxt = atrasada ? 'Atrasada' : IMPL_STATUS_LABEL[r.status] || r.status;
+    return `<tr data-id="${r.id}" class="implRow">
+      <td><b>${esc(r.condo_name||'—')}</b></td>
+      <td class="subtle">${esc(r.condo_city||'—')}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;background:var(--ink-100);border-radius:3px;overflow:hidden">
+            <div style="width:${pct}%;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));height:100%"></div>
+          </div>
+          <span class="mono" style="font-size:11px;min-width:46px;text-align:right">${r.done}/${r.total}</span>
+        </div>
+      </td>
+      <td><span class="pill ${pillCls}">${pillTxt}</span></td>
+      <td class="subtle">${r.target_date ? new Date(r.target_date).toLocaleDateString('pt-BR') : '—'}</td>
+      <td class="subtle">${esc(r.technician_name||'—')}</td>
+      <td><span class="card-action">Abrir →</span></td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('.implRow').forEach(el => el.addEventListener('click', () => openImplantationDrawer(el.dataset.id)));
+}
+document.querySelectorAll('.implTab').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.implTab').forEach(x => x.classList.toggle('active', x===b));
+  _implFilter = b.dataset.s; loadImplantations();
+}));
+document.querySelector('#newImplBtn')?.addEventListener('click', async () => {
+  const condos = await fetch('/api/condominiums').then(r=>r.json());
+  const options = condos.map(c => `${c.id} — ${c.name}`).join('\n');
+  const pick = prompt('ID do condomínio (copiar da lista abaixo):\n\n'+options.slice(0,2000));
+  if (!pick) return;
+  const condoId = pick.split(' ')[0].trim();
+  await fetch('/api/implantations', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ condo_id: condoId }) });
+  loadImplantations();
+});
+document.querySelector('#backfillImplBtn')?.addEventListener('click', async () => {
+  if (!confirm('Criar uma implantação para cada condomínio que ainda não tem uma?')) return;
+  const [condos, existing] = await Promise.all([
+    fetch('/api/condominiums').then(r=>r.json()),
+    fetch('/api/implantations').then(r=>r.json()),
+  ]);
+  const has = new Set(existing.map(x => x.condo_id));
+  let count = 0;
+  for (const c of condos) {
+    if (!c.is_contract || has.has(c.id)) continue;
+    await fetch('/api/implantations', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ condo_id: c.id }) });
+    count++;
+  }
+  toast(`✓ ${count} implantações criadas`);
+  loadImplantations();
+});
+
+async function openImplantationDrawer(id) {
+  const [impl, techs] = await Promise.all([
+    fetch('/api/implantations/'+id).then(r=>r.json()),
+    fetch('/api/technicians').then(r=>r.json()),
+  ]);
+  const drawer = document.querySelector('#implDrawer');
+  const totalSteps = impl.steps.length;
+  const doneSteps = impl.steps.filter(s=>s.completed).length;
+  const progress = totalSteps ? Math.round((doneSteps/totalSteps)*100) : 0;
+  const donePct = doneSteps;
+  // SLA color
+  const dd = impl.days_to_deadline;
+  const slaColor = dd == null ? 'var(--ink-500)' : dd < 0 ? 'var(--danger)' : dd <= 7 ? 'var(--warning)' : 'var(--success)';
+  const slaTxt = dd == null ? '—' : dd < 0 ? `${Math.abs(dd)}d de atraso` : dd === 0 ? 'vence hoje' : `em ${dd} dias`;
+  drawer.innerHTML = `
+    <div class="drawer-header">
+      <div>
+        <div class="font-semibold text-lg tracking-tight">${esc(impl.condo_name||'—')}</div>
+        <div class="text-xs text-gray-500">${esc(impl.condo_city||'')}  ·  Implantação ${impl.id.slice(-6)}</div>
+      </div>
+      <button class="text-gray-500 text-xl closeBtn">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="card-new" style="padding:16px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <span class="stat-label">Progresso</span>
+          <b>${donePct}/${totalSteps} etapas · ${progress}%</b>
+        </div>
+        <div style="height:10px;background:var(--ink-100);border-radius:5px;overflow:hidden">
+          <div style="width:${progress}%;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));height:100%;transition:width 600ms var(--ease-out)"></div>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:12px;font-size:12px">
+          <span>SLA: <b style="color:${slaColor}">${esc(slaTxt)}</b></span>
+          ${impl.target_date ? `<span class="subtle">prazo ${new Date(impl.target_date).toLocaleDateString('pt-BR')}</span>` : ''}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="label">Tipo de obra</label>
+          <select class="select" id="implType">
+            <option value="sem_obra"${impl.type==='sem_obra'?' selected':''}>Sem obra</option>
+            <option value="obra_leve"${impl.type==='obra_leve'?' selected':''}>Obra leve</option>
+            <option value="obra_pesada"${impl.type==='obra_pesada'?' selected':''}>Obra pesada</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Status</label>
+          <select class="select" id="implStatus">
+            ${Object.entries(IMPL_STATUS_LABEL).map(([k,v]) => `<option value="${k}"${impl.status===k?' selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="label">Técnico responsável</label>
+          <select class="select" id="implTech">
+            <option value="">— sem técnico —</option>
+            ${techs.map(t => `<option value="${t.id}"${impl.technician_id===t.id?' selected':''}>${esc(t.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="label">Prazo contratual (SLA 60d)</label>
+          <input type="date" id="implTarget" class="input" value="${impl.target_date||''}"/>
+        </div>
+        <div>
+          <label class="label">Contrato assinado</label>
+          <input class="input" value="${impl.contract_signed_at ? new Date(impl.contract_signed_at).toLocaleDateString('pt-BR') : '—'}" disabled/>
+        </div>
+        <div>
+          <label class="label">Concluída em</label>
+          <input class="input" value="${impl.completed_at ? new Date(impl.completed_at).toLocaleDateString('pt-BR') : '—'}" disabled/>
+        </div>
+      </div>
+      <label class="label" style="margin-top:12px">Observações gerais</label>
+      <textarea id="implNotes" class="textarea" rows="2" placeholder="Notas gerais...">${esc(impl.notes||'')}</textarea>
+
+      <div class="section-title">Etapas & checklist operacional</div>
+      <div id="implSteps"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button id="addStepBtn" class="chip">+ Adicionar etapa</button>
+        <button id="resetTplBtn" class="chip" style="color:var(--brand-700)">Resetar com template v2</button>
+      </div>
+
+      <div class="section-title">Documentos</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <a href="/api/implantations/${impl.id}/pdf/delivery" target="_blank" class="chip">📄 Termo de entrega</a>
+        <a href="/api/implantations/${impl.id}/pdf/survey" target="_blank" class="chip">📋 Checklist de vistoria</a>
+        <a href="/api/implantations/${impl.id}/pdf/installation" target="_blank" class="chip">📝 Relatório de instalação</a>
+        <button class="chip" id="sendTermBtn" style="color:var(--brand-700)">✍️ Enviar termo pra assinatura</button>
+        <a href="/implantacao.html?id=${impl.id}" target="_blank" class="chip" style="color:var(--brand-700)">📱 Abrir checklist mobile</a>
+      </div>
+
+      <div class="section-title">Galeria (${impl.files?.length||0})</div>
+      <div id="implGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px"></div>
+      <label class="chip mt-2" style="width:fit-content;cursor:pointer">
+        + Subir foto
+        <input type="file" accept="image/*" id="implUpload" style="display:none"/>
+      </label>
+
+      <div class="section-title">Log de atividades (${impl.logs?.length||0})</div>
+      <div id="implLogs" style="font-size:12px;max-height:280px;overflow-y:auto"></div>
+
+      <div class="section-title">Zona de risco</div>
+      <button class="btn btn-danger" id="delImplBtn">Excluir implantação</button>
+    </div>`;
+
+  const statusBadge = (s) => {
+    const st = s.status || (s.completed ? 'concluida' : 'pendente');
+    const map = { concluida:'success', em_andamento:'warning', pendente:'neutral', atrasada:'danger' };
+    const lbl = { concluida:'Concluída', em_andamento:'Em andamento', pendente:'Pendente', atrasada:'Atrasada' };
+    return `<span class="pill ${map[st]||'neutral'}">${lbl[st]||st}</span>`;
+  };
+  const renderSteps = () => {
+    const host = drawer.querySelector('#implSteps');
+    host.innerHTML = impl.steps.map(s => {
+      const itemsTotal = s.items?.length || 0;
+      const itemsDone = s.items?.filter(i=>i.done).length || 0;
+      const itemPct = itemsTotal ? Math.round(itemsDone/itemsTotal*100) : (s.completed?100:0);
+      return `
+      <details class="card-new stepItem" style="padding:0;margin-bottom:10px;overflow:hidden" data-sid="${s.id}" ${s.status==='em_andamento' || (!s.completed && itemsDone>0) ? 'open':''}>
+        <summary style="cursor:pointer;padding:14px 16px;display:flex;gap:12px;align-items:center;list-style:none">
+          <input type="checkbox" ${s.completed?'checked':''} class="stepChk" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;accent-color:var(--brand-700)"/>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span style="font-weight:600;color:${s.completed?'var(--ink-400)':'var(--ink-900)'};text-decoration:${s.completed?'line-through':'none'}">${s.step_number}. ${esc(s.title)}</span>
+              ${statusBadge(s)}
+              ${itemsTotal ? `<span class="subtle" style="font-size:11px">${itemsDone}/${itemsTotal} itens</span>` : ''}
+            </div>
+            ${s.description?`<div class="subtle" style="font-size:12px;margin-top:2px">${esc(s.description)}</div>`:''}
+            ${s.completed_at?`<div style="font-size:11px;color:var(--success);margin-top:4px">✓ ${new Date(s.completed_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</div>`:''}
+          </div>
+          ${itemsTotal ? `<div style="width:60px;height:6px;background:var(--ink-100);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="width:${itemPct}%;background:var(--brand-600);height:100%"></div></div>` : ''}
+          <button class="text-red-600 delStepBtn" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink-400);flex-shrink:0" title="Remover etapa">×</button>
+        </summary>
+        <div style="padding:0 16px 14px 46px;border-top:1px solid var(--ink-100)">
+          ${itemsTotal ? `<div class="subItems" style="margin-top:10px">` + s.items.map(it => `
+            <label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--ink-100);cursor:pointer" data-iid="${it.id}">
+              <input type="checkbox" class="itemChk" ${it.done?'checked':''} style="width:16px;height:16px;margin-top:2px;accent-color:var(--brand-700)"/>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;color:${it.done?'var(--ink-400)':'var(--ink-800)'};text-decoration:${it.done?'line-through':'none'}">${esc(it.title)}</div>
+                ${it.completed_at?`<div style="font-size:10px;color:var(--success)">✓ ${new Date(it.completed_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</div>`:''}
+              </div>
+              <button class="delItemBtn" data-iid="${it.id}" style="background:none;border:none;font-size:14px;cursor:pointer;color:var(--ink-400)">×</button>
+            </label>`).join('') + `</div>` : '<div class="subtle" style="font-size:12px;margin-top:8px">Sem sub-itens. Adicione abaixo ou marque a etapa direto.</div>'}
+          <div style="display:flex;gap:6px;margin-top:10px">
+            <input class="input py-1 addItemInput" placeholder="Adicionar item ao checklist..." style="min-height:34px;font-size:12px;flex:1"/>
+            <button class="chip addItemBtn">+</button>
+          </div>
+          <textarea class="textarea stepNote" placeholder="Observações desta etapa..." rows="1" style="min-height:34px;font-size:12px;margin-top:8px">${esc(s.notes||'')}</textarea>
+        </div>
+      </details>`;
+    }).join('');
+
+    host.querySelectorAll('.stepItem').forEach(it => {
+      const sid = it.dataset.sid;
+      it.querySelector('.stepChk').addEventListener('click', e => e.stopPropagation());
+      it.querySelector('.stepChk').addEventListener('change', async e => {
+        await fetch('/api/implantation-steps/'+sid, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ completed: e.target.checked ? 1 : 0 }) });
+        openImplantationDrawer(id); loadImplantations();
+      });
+      it.querySelector('.stepNote').addEventListener('change', async e => {
+        await fetch('/api/implantation-steps/'+sid, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ notes: e.target.value }) });
+        toast('Anotação salva');
+      });
+      it.querySelector('.delStepBtn').addEventListener('click', async (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        if (!confirm('Excluir esta etapa e seus itens?')) return;
+        await fetch('/api/implantation-steps/'+sid, { method:'DELETE' });
+        openImplantationDrawer(id);
+      });
+      it.querySelectorAll('.itemChk').forEach(chk => chk.addEventListener('change', async e => {
+        const iid = e.target.closest('[data-iid]').dataset.iid;
+        await fetch('/api/implantation-checklist-items/'+iid, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ done: e.target.checked ? 1 : 0 }) });
+        openImplantationDrawer(id); loadImplantations();
+      }));
+      it.querySelectorAll('.delItemBtn').forEach(btn => btn.addEventListener('click', async e => {
+        e.preventDefault(); e.stopPropagation();
+        if (!confirm('Excluir este item?')) return;
+        await fetch('/api/implantation-checklist-items/'+btn.dataset.iid, { method:'DELETE' });
+        openImplantationDrawer(id);
+      }));
+      it.querySelector('.addItemBtn').addEventListener('click', async e => {
+        e.preventDefault();
+        const input = it.querySelector('.addItemInput');
+        const title = input.value.trim(); if (!title) return;
+        await fetch('/api/implantation-steps/'+sid+'/items', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title }) });
+        input.value = ''; openImplantationDrawer(id);
+      });
+    });
+  };
+  renderSteps();
+
+  // Gallery
+  const gal = drawer.querySelector('#implGallery');
+  gal.innerHTML = (impl.files||[]).map(f => `<a href="${f.url}" target="_blank" style="display:block;aspect-ratio:1/1;background:url('${f.url}') center/cover;border-radius:8px;border:1px solid var(--ink-200)" title="${esc(f.name||'')}"></a>`).join('') || '<div class="subtle" style="grid-column:1/-1;font-size:12px">Nenhum arquivo ainda</div>';
+  drawer.querySelector('#implUpload').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    const r = await fetch('/api/implantations/'+id+'/files', { method:'POST', body: fd });
+    const d = await r.json();
+    if (r.ok) { toast('✓ Foto enviada'); openImplantationDrawer(id); }
+    else toast('Erro: '+(d.error||d.detail));
+  });
+
+  // Logs
+  const logs = (impl.logs||[]).map(l => {
+    const meta = l.data ? JSON.parse(l.data) : {};
+    const icon = l.action.startsWith('step.') ? '✓' : l.action.startsWith('status') ? '🔁' : l.action.startsWith('file') ? '📎' : l.action.startsWith('template') ? '🛠' : '•';
+    return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--ink-100)">
+      <span style="width:22px;text-align:center;color:var(--ink-400)">${icon}</span>
+      <div style="flex:1;min-width:0">
+        <div><b>${esc(l.action)}</b> ${meta.title ? '— '+esc(meta.title) : ''} ${meta.from!==undefined?` <span class="subtle">(${esc(String(meta.from||'—'))} → ${esc(String(meta.to||'—'))})</span>`:''}</div>
+        <div class="subtle" style="font-size:11px">${esc(l.actor||'sistema')} · ${new Date(l.at).toLocaleString('pt-BR')}</div>
+      </div>
+    </div>`;
+  }).join('');
+  drawer.querySelector('#implLogs').innerHTML = logs || '<div class="subtle">Nenhuma atividade registrada ainda</div>';
+
+  // Send installation term to Autentique for signature
+  drawer.querySelector('#sendTermBtn')?.addEventListener('click', async () => {
+    const email = prompt('E-mail do responsável pelo condomínio (para assinar o termo):', impl.condo_email || '');
+    if (!email) return;
+    const name = prompt('Nome do responsável:', 'Síndico');
+    if (!name) return;
+    toast('Enviando para Autentique...');
+    try {
+      const pdfRes = await fetch('/api/implantations/'+id+'/pdf/installation');
+      const pdfBlob = await pdfRes.blob();
+      const pdfBase64 = await new Promise((res)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(pdfBlob); });
+      const r = await fetch(`/api/visits/impl-${id}/autentique`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          pdfBase64,
+          name: `Termo de Implantação - ${impl.condo_name}`,
+          signers: [
+            { name: 'Lavandery (Contratada)', email: 'contato@lavandery.com.br' },
+            { name, email }
+          ]
+        })
+      });
+      const d = await r.json();
+      if (r.ok) toast('✓ Enviado pro Autentique'); else toast('Erro: '+(d.detail||d.error));
+    } catch(e) { toast('Erro: '+e.message); }
+  });
+
+  // Reset template
+  drawer.querySelector('#resetTplBtn').addEventListener('click', async () => {
+    if (!confirm('Isso vai APAGAR as etapas atuais e recriar todas com o template v2 (11 etapas com checklists).\n\nContinuar?')) return;
+    await fetch('/api/implantations/'+id+'/reset-template', { method:'POST' });
+    toast('✓ Template v2 aplicado'); openImplantationDrawer(id); loadImplantations();
+  });
+
+  drawer.querySelector('.closeBtn').addEventListener('click', closeAll);
+  ['implStatus','implTech','implTarget','implNotes','implType'].forEach(fid => drawer.querySelector('#'+fid).addEventListener('change', async (e) => {
+    const payload = {};
+    payload.status = drawer.querySelector('#implStatus').value;
+    payload.technician_id = drawer.querySelector('#implTech').value || null;
+    payload.target_date = drawer.querySelector('#implTarget').value || null;
+    payload.notes = drawer.querySelector('#implNotes').value || null;
+    payload.type = drawer.querySelector('#implType').value;
+    await fetch('/api/implantations/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    loadImplantations();
+    toast('Implantação atualizada');
+  }));
+  drawer.querySelector('#addStepBtn').addEventListener('click', async () => {
+    const title = prompt('Título do passo:'); if (!title) return;
+    await fetch('/api/implantations/'+id+'/steps', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title }) });
+    openImplantationDrawer(id);
+  });
+  drawer.querySelector('#delImplBtn').addEventListener('click', async () => {
+    if (!confirm('Excluir DEFINITIVAMENTE esta implantação e todos os seus passos?')) return;
+    await fetch('/api/implantations/'+id, { method:'DELETE' });
+    closeAll(); loadImplantations();
+  });
+
+  document.querySelector('#overlay').classList.add('show');
+  drawer.classList.add('show');
+}
+
+// ---------- Histórico ----------
+let _histPeriod = 'week', _histCharts = {};
+async function loadHistory() {
+  // Populate condo select once
+  const sel = document.querySelector('#histCondo');
+  if (sel && sel.options.length <= 1) {
+    const condos = await fetch('/api/condominiums').then(r=>r.ok?r.json():[]);
+    condos.forEach(c => sel.insertAdjacentHTML('beforeend', `<option value="${c.id}">${esc(c.name)}</option>`));
+  }
+  renderHistory();
+}
+async function renderHistory() {
+  const p = _histPeriod;
+  const condo = document.querySelector('#histCondo').value;
+  const from = document.querySelector('#histFrom').value;
+  const to = document.querySelector('#histTo').value;
+  const qs = new URLSearchParams({ period: p });
+  if (condo) qs.set('condo_id', condo);
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  const data = await fetch('/api/supplies/history?'+qs).then(r=>r.json());
+  renderHistoryTotals(data);
+  renderHistoryCharts(data);
+  renderHistoryTable(data);
+}
+function renderHistoryTotals(d) {
+  const items = [
+    ['Sabão entregue', d.totals.soap_gallons.toFixed(1)+' gal', '#533C9D'],
+    ['Amaciante entregue', d.totals.softener_gallons.toFixed(1)+' gal', '#9C83D8'],
+    ['Ciclos rodados', d.totals.cycles.toLocaleString('pt-BR'), '#10B981'],
+    ['Períodos', d.series.length, '#3B82F6'],
+  ];
+  document.querySelector('#histTotals').innerHTML = items.map(([l,v,c])=>`
+    <div class="stat-card" style="--accent:${c}">
+      <div class="stat-label">${l}</div>
+      <div class="stat-value mini">${v}</div>
+    </div>`).join('');
+}
+function renderHistoryCharts(d) {
+  const labels = d.series.map(s => s.bucket);
+  const soap = d.series.map(s => s.soap_gallons);
+  const soft = d.series.map(s => s.softener_gallons);
+  const cycles = d.series.map(s => s.cycles);
+
+  if (_histCharts.sup) _histCharts.sup.destroy();
+  _histCharts.sup = new Chart(document.getElementById('histChartSupplies').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Sabão (gal)', data: soap, backgroundColor: '#533C9D', borderRadius: 4 },
+      { label: 'Amaciante (gal)', data: soft, backgroundColor: '#9C83D8', borderRadius: 4 },
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } },
+      scales:{ y:{ beginAtZero:true, grid:{ color:'#F3F4F6'} }, x:{ grid:{ display:false } } } }
+  });
+
+  if (_histCharts.cyc) _histCharts.cyc.destroy();
+  _histCharts.cyc = new Chart(document.getElementById('histChartCycles').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label:'Ciclos', data: cycles, borderColor:'#10B981', backgroundColor:'rgba(16,185,129,.1)', tension:0.3, fill:true, pointRadius:3 }
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+      scales:{ y:{ beginAtZero:true, grid:{ color:'#F3F4F6'} }, x:{ grid:{ display:false } } } }
+  });
+}
+function renderHistoryTable(d) {
+  const rows = d.series.slice().reverse(); // mais recente primeiro
+  const tbody = document.querySelector('#histRows');
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--ink-400)">Sem dados no período</td></tr>`; return; }
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td><b>${r.bucket}</b></td>
+    <td style="text-align:right">${r.soap_gallons.toFixed(1)}</td>
+    <td style="text-align:right">${r.softener_gallons.toFixed(1)}</td>
+    <td style="text-align:right"><b>${r.cycles.toLocaleString('pt-BR')}</b></td>
+  </tr>`).join('');
+}
+document.querySelectorAll('.histPeriod').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.histPeriod').forEach(x => x.classList.toggle('active', x===b));
+  _histPeriod = b.dataset.p; renderHistory();
+}));
+document.querySelector('#histApply')?.addEventListener('click', renderHistory);
+document.querySelector('#histCondo')?.addEventListener('change', renderHistory);
+document.querySelector('#histExportBtn')?.addEventListener('click', async () => {
+  const p = _histPeriod;
+  const condo = document.querySelector('#histCondo').value;
+  const qs = new URLSearchParams({ period: p });
+  if (condo) qs.set('condo_id', condo);
+  const d = await fetch('/api/supplies/history?'+qs).then(r=>r.json());
+  const lines = ['periodo;sabao_gal;amaciante_gal;ciclos', ...d.series.map(s => `${s.bucket};${s.soap_gallons.toFixed(2)};${s.softener_gallons.toFixed(2)};${s.cycles}`)];
+  const blob = new Blob([lines.join('\n')], { type:'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `historico-${p}-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+});
+
+// ---------- Mapa & Rota ----------
+let leafletMap, mapLayers = [];
+const TECH_COLORS = { t_marcio:'#533C9D', t_wagner:'#16A34A' };
+function techColor(id){ return TECH_COLORS[id] || '#F59E0B'; }
+
+async function loadMap() {
+  // Populate tech select
+  const techs = await (await fetch('/api/technicians')).json();
+  const sel = document.querySelector('#rTech');
+  sel.innerHTML = techs.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  document.querySelector('#rDate').value = document.querySelector('#rDate').value || new Date().toISOString().slice(0,10);
+  // Init Leaflet
+  if (!leafletMap) {
+    leafletMap = L.map('leafletMap').setView([-23.55, -46.63], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap'
+    }).addTo(leafletMap);
+  }
+  // Plot all geocoded condos
+  await renderAllCondosOnMap();
+}
+
+function clearMapLayers() {
+  mapLayers.forEach(l => leafletMap.removeLayer(l));
+  mapLayers = [];
+}
+
+async function renderAllCondosOnMap() {
+  clearMapLayers();
+  const condos = await (await fetch('/api/condominiums')).json();
+  const geo = condos.filter(c => c.lat != null && c.lng != null);
+  const total = condos.length;
+  document.querySelector('#rStats').textContent = `${geo.length}/${total} condomínios geocodificados`;
+  if (!geo.length) return;
+  const markers = geo.map(c => {
+    const m = L.circleMarker([c.lat, c.lng], { radius: 6, color:'#533C9D', weight: 2, fillColor:'#A292D5', fillOpacity: .8 })
+      .bindPopup(`<b>${escHTML(c.name)}</b><br>${escHTML(c.address||'')}<br>${escHTML(c.city||'')}<br>${(c.washers||0)}L + ${(c.dryers||0)}S · ${escHTML(c.maintenance_label||'Semestral')}`);
+    m.addTo(leafletMap);
+    mapLayers.push(m);
+    return m;
+  });
+  const g = L.featureGroup(markers);
+  leafletMap.fitBounds(g.getBounds().pad(0.1));
+}
+
+function escHTML(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+async function loadRoute() {
+  const date = document.querySelector('#rDate').value;
+  const tech = document.querySelector('#rTech').value;
+  if (!date || !tech) return;
+  const r = await fetch(`/api/route?date=${date}&technician=${tech}`);
+  const data = await r.json();
+  clearMapLayers();
+  const stops = data.stops || [];
+  if (!stops.length) {
+    document.querySelector('#routeList').innerHTML = `<li class="text-gray-400">Sem visitas com endereço geocodificado nesse dia.</li>`;
+    document.querySelector('#rStats').textContent = 'Nenhuma parada';
+    await renderAllCondosOnMap();
+    return;
+  }
+  const color = techColor(tech);
+  // HQ marker
+  const hq = L.marker([data.start.lat, data.start.lng], { title: 'Lavandery HQ' }).addTo(leafletMap).bindPopup('🏢 Lavandery HQ');
+  mapLayers.push(hq);
+  // Numbered stops
+  const latlngs = [[data.start.lat, data.start.lng]];
+  stops.forEach((s, i) => {
+    latlngs.push([s.lat, s.lng]);
+    const m = L.marker([s.lat, s.lng], {
+      icon: L.divIcon({
+        className: '',
+        html: `<div style="background:${color};color:#fff;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.3);border:2px solid #fff">${i+1}</div>`,
+        iconSize: [28,28], iconAnchor: [14,14]
+      })
+    }).bindPopup(`<b>#${i+1} · ${escHTML(s.condo_name)}</b><br>${escHTML(s.address||'')}<br><b>${s.scheduled_time||''}</b> · ${s.distanceFromPrev.toFixed(1)} km desde anterior`);
+    m.addTo(leafletMap);
+    mapLayers.push(m);
+  });
+  const line = L.polyline(latlngs, { color, weight: 3, opacity: .7, dashArray: '4,8' }).addTo(leafletMap);
+  mapLayers.push(line);
+  leafletMap.fitBounds(line.getBounds().pad(0.15));
+
+  document.querySelector('#rStats').textContent = `${stops.length} paradas · ${data.totalKm} km total${data.unmapped?.length?' · '+data.unmapped.length+' sem coords':''}`;
+  document.querySelector('#routeList').innerHTML = stops.map((s,i) => `
+    <li class="flex items-start gap-3 py-2 border-b border-gray-50">
+      <span style="background:${color};color:#fff;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;flex-shrink:0">${i+1}</span>
+      <div class="flex-1">
+        <div class="font-medium">${escHTML(s.condo_name)}</div>
+        <div class="text-xs text-gray-500">${escHTML(s.address||'')} — ${s.scheduled_time||''}</div>
+      </div>
+      <div class="text-xs text-gray-500 whitespace-nowrap">${s.distanceFromPrev.toFixed(1)} km</div>
+    </li>`).join('');
+}
+
+document.querySelector('#rLoad')?.addEventListener('click', loadRoute);
+document.querySelector('#geocodeAll')?.addEventListener('click', async () => {
+  const btn = document.querySelector('#geocodeAll');
+  btn.disabled = true; btn.textContent = 'Geocodificando... (pode levar 2-3 min)';
+  const r = await fetch('/api/condominiums/geocode', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
+  const data = await r.json();
+  btn.disabled = false; btn.textContent = 'Geocodificar pendentes';
+  alert(`Processados: ${data.processed} · Geocodificados: ${data.geocoded} · Falhas: ${data.failed}`);
+  await renderAllCondosOnMap();
+});
+
+// ---------- Insumos & Entregas ----------
+let _supCache = [];
+async function loadSupplies() {
+  const r = await fetch('/api/supplies/forecast');
+  const data = r.ok ? await r.json() : { data: [] };
+  _supCache = data.data || [];
+  renderSupplies('');
+}
+function renderSupplies(urg) {
+  const rows = urg ? _supCache.filter(r => r.worst_urgency === urg) : _supCache;
+  const counts = { urgente:0, atencao:0, planejar:0, ok:0 };
+  _supCache.forEach(r => counts[r.worst_urgency] = (counts[r.worst_urgency]||0)+1);
+  document.querySelector('#supStats').textContent = `${rows.length} listados · Urgente: ${counts.urgente} · Atenção: ${counts.atencao} · Planejar: ${counts.planejar} · OK: ${counts.ok}`;
+  const badge = (u) => u==='urgente'?'chip-danger':u==='atencao'?'':u==='ok'?'chip-success':'';
+  const lbl = { urgente:'Urgente', atencao:'Atenção', planejar:'Planejar', ok:'OK' };
+  document.querySelector('#supRows').innerHTML = rows.map(r => {
+    const s = r.soap, a = r.softener;
+    const earliest = r.soap.days_left < r.softener.days_left ? r.soap.delivery_date : r.softener.delivery_date;
+    return `<tr class="border-b border-gray-50 align-top" data-id="${r.condo_id}">
+      <td class="py-2 pr-3">
+        <div class="font-medium">${esc(r.condo_name)}</div>
+        <div class="text-xs text-gray-500">${esc(r.city||'')}</div>
+      </td>
+      <td class="pr-3 text-center">
+        <input type="number" min="0" class="input py-1 cyclesInput text-center" data-id="${r.condo_id}" value="${r.cycles_per_week||0}" style="min-height:34px;width:80px" title="Ciclos por semana">
+      </td>
+      <td class="pr-3">
+        <div>${s.gallons_on_site.toFixed(1)} gal · <b>${s.days_left}d</b></div>
+        <div class="text-xs text-gray-500">${s.ml_per_cycle}ml/ciclo · ${s.gallons_per_month}gal/mês</div>
+        <span class="chip ${badge(s.urgency)}" aria-pressed="true">${lbl[s.urgency]}</span>
+      </td>
+      <td class="pr-3">
+        <div>${a.gallons_on_site.toFixed(1)} gal · <b>${a.days_left}d</b></div>
+        <div class="text-xs text-gray-500">${a.ml_per_cycle}ml/ciclo · ${a.gallons_per_month}gal/mês</div>
+        <span class="chip ${badge(a.urgency)}" aria-pressed="true">${lbl[a.urgency]}</span>
+      </td>
+      <td class="pr-3 font-semibold">${earliest ? new Date(earliest).toLocaleDateString('pt-BR') : '—'}</td>
+      <td class="pr-3"><button class="chip deliverBtn" data-id="${r.condo_id}" data-name="${esc(r.condo_name)}">Registrar entrega</button></td>
+    </tr>`;
+  }).join('');
+  document.querySelectorAll('.deliverBtn').forEach(b => b.addEventListener('click', () => openDeliveryModal(b.dataset.id, b.dataset.name)));
+  document.querySelectorAll('.cyclesInput').forEach(inp => inp.addEventListener('change', async (e) => {
+    const id = e.target.dataset.id;
+    const val = parseInt(e.target.value, 10) || 0;
+    e.target.style.background = '#F0EDF9';
+    await fetch('/api/condominiums/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cycles_per_week: val }) });
+    setTimeout(()=>{ e.target.style.background = ''; }, 500);
+    // Recarrega forecast + alertas na hora
+    loadSupplies();
+    loadAlerts(false);
+  }));
+}
+document.querySelectorAll('.urgTab').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.urgTab').forEach(x => x.setAttribute('aria-pressed', x===b));
+  renderSupplies(b.dataset.urg);
+}));
+document.querySelector('#newDeliveryBtn')?.addEventListener('click', () => openDeliveryModal(null, null));
+
+// ---------- Chamados ----------
+const TICKET_STATUS = { aberto:'Aberto', em_andamento:'Em andamento', resolvido:'Resolvido', fechado:'Fechado' };
+async function loadTickets() {
+  const [tickets, techs] = await Promise.all([
+    fetch('/api/tickets').then(r=>r.ok?r.json():[]),
+    fetch('/api/technicians').then(r=>r.ok?r.json():[]),
+  ]);
+  const techMap = Object.fromEntries(techs.map(t=>[t.id,t.name]));
+  const cols = { aberto: [], em_andamento: [], resolvido: [], fechado: [] };
+  tickets.forEach(t => { (cols[t.status]||cols.aberto).push(t); });
+  document.querySelector('#cntAberto').textContent = cols.aberto.length;
+  document.querySelector('#cntAnd').textContent = cols.em_andamento.length;
+  document.querySelector('#cntRes').textContent = cols.resolvido.length;
+  document.querySelector('#cntFec').textContent = cols.fechado.length;
+  const card = (t) => {
+    const prioCls = t.priority==='urgente'?'bg-red-50 border-red-200':t.priority==='alta'?'bg-amber-50 border-amber-200':'bg-white border-gray-100';
+    return `<div class="rounded-lg border ${prioCls} p-3 kanban-card ticketCard" draggable="true" data-id="${t.id}" data-current="${t.status}">
+      <div class="text-xs text-gray-500 mb-1">${esc(t.condo_name||'—')} · <span class="uppercase">${esc(t.priority)}</span></div>
+      <div class="font-medium text-sm">${esc(t.title)}</div>
+      <div class="text-xs text-gray-500 mt-1">${esc(t.category||'outro')} · ${esc(techMap[t.assigned_to]||'não atribuído')}</div>
+      <div class="text-xs text-gray-400 mt-1">${new Date(t.created_at).toLocaleDateString('pt-BR')} ${new Date(t.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`;
+  };
+  document.querySelector('#colAberto').innerHTML = cols.aberto.map(card).join('') || '<div class="text-xs text-gray-400">—</div>';
+  document.querySelector('#colAnd').innerHTML = cols.em_andamento.map(card).join('') || '<div class="text-xs text-gray-400">—</div>';
+  document.querySelector('#colRes').innerHTML = cols.resolvido.map(card).join('') || '<div class="text-xs text-gray-400">—</div>';
+  document.querySelector('#colFec').innerHTML = cols.fechado.map(card).join('') || '<div class="text-xs text-gray-400">—</div>';
+
+  // Click opens modal
+  document.querySelectorAll('.ticketCard').forEach(el => el.addEventListener('click', () => openTicketModal(el.dataset.id)));
+
+  // Drag & drop
+  let dragId = null, dragCurrent = null;
+  document.querySelectorAll('.ticketCard').forEach(el => {
+    el.addEventListener('dragstart', e => {
+      dragId = el.dataset.id; dragCurrent = el.dataset.current;
+      el.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', dragId); } catch {}
+    });
+    el.addEventListener('dragend', () => { el.classList.remove('dragging'); document.querySelectorAll('.kanban-col').forEach(c=>c.classList.remove('drop-active')); });
+  });
+  document.querySelectorAll('.kanban-col').forEach(col => {
+    col.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; col.classList.add('drop-active'); });
+    col.addEventListener('dragleave', () => col.classList.remove('drop-active'));
+    col.addEventListener('drop', async e => {
+      e.preventDefault();
+      col.classList.remove('drop-active');
+      const newStatus = col.dataset.status;
+      if (!dragId || newStatus === dragCurrent) return;
+      const r = await fetch('/api/tickets/'+dragId, {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ status: newStatus })
+      });
+      const data = await r.json();
+      loadTickets();
+      showNotificationToast(data?.notification, newStatus);
+    });
+  });
+}
+
+function showNotificationToast(n, newStatus) {
+  if (!n || !n.channels || !n.channels.length) { toast(`Status → ${newStatus}`); return; }
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;right:20px;bottom:20px;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(17,24,39,.18);padding:16px 18px;max-width:360px;z-index:100;border:1px solid #F1F2F4';
+  const emailLine = n.email ? (n.email.sent ? `<div class="text-sm"><b style="color:#16A34A">✉ E-mail enviado</b> para ${esc(n.email.target)}</div>` : `<div class="text-sm"><b style="color:#F59E0B">✉ E-mail em fila</b> (${esc(n.email.reason||'SMTP não configurado')}) — ${esc(n.email.target)}</div>`) : '';
+  const waLine = n.wa_url ? `<a href="${n.wa_url}" target="_blank" class="btn btn-primary mt-2" style="padding:0 16px;min-height:40px">📱 Enviar WhatsApp agora</a>` : '';
+  host.innerHTML = `
+    <div class="font-semibold mb-2">Status atualizado → ${esc(newStatus)}</div>
+    ${emailLine}
+    ${waLine}
+    <button class="chip mt-3" onclick="this.parentElement.remove()">Fechar</button>`;
+  document.body.appendChild(host);
+  setTimeout(() => host.remove(), 12000);
+}
+
+document.querySelector('#importSelected')?.addEventListener('click', async () => {
+  const rows = Array.from(document.querySelectorAll('#contractsRows tr'));
+  const items = [];
+  rows.forEach(r => {
+    if (!r.querySelector('.sel')?.checked) return;
+    const i = parseInt(r.dataset.i, 10);
+    const c = contracts[i];
+    const cityField = r.querySelector('[data-f="city"]').value.trim();
+    const [city, state] = cityField.split('/').map(s=>s.trim());
+    items.push({
+      name: r.querySelector('[data-f="name"]').value.trim(),
+      address: r.querySelector('[data-f="address"]').value.trim(),
+      city: state ? `${city}/${state}` : city,
+      cep: r.querySelector('[data-f="cep"]').value.trim(),
+      washers: parseInt(r.querySelector('[data-f="washers"]').value,10) || 0,
+      dryers: parseInt(r.querySelector('[data-f="dryers"]').value,10) || 0,
+      autentique_doc_id: c.id,
+    });
+  });
+  if (!items.length) { alert('Selecione ao menos um contrato'); return; }
+  const status = document.querySelector('#importStatus');
+  status.textContent = `Importando ${items.length} condomínios…`;
+  const r = await fetch('/api/condominiums/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ items }) });
+  const data = await r.json();
+  if (r.ok) status.innerHTML = `<span class="text-green-600">✓ ${data.imported} condomínios importados.</span>`;
+  else status.innerHTML = `<span class="text-red-600">Erro ao importar: ${data.detail||data.error}</span>`;
+});
+</script>
+</body>
+</html>

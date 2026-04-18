@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: lavandery
+    env: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    disk:
+      name: lavandery-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: LAVANDERY_DB
+        value: /data/lavandery.db
+      - key: AUTENTIQUE_API_TOKEN
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: API_BEARER
+        generateValue: true
+    healthCheckPath: /health

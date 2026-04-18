@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#533C9D" />
+<title>Lavandery · Entrar</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"/>
+<link rel="stylesheet" href="design.css"/>
+<style>
+  :root { color-scheme: light; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body { font-family: var(--font-sans); background: #0B0A1A; color: #fff; }
+
+  /* Split layout */
+  .auth {
+    display: grid; grid-template-columns: 1.1fr 1fr; min-height: 100vh;
+    position: relative;
+  }
+  @media (max-width: 900px) { .auth { grid-template-columns: 1fr; } .side { display: none !important; } }
+
+  /* LEFT — cinematic gradient side */
+  .side {
+    position: relative; overflow: hidden;
+    background: radial-gradient(circle at 20% 20%, #7D5FC7 0%, transparent 50%),
+                radial-gradient(circle at 80% 30%, #533C9D 0%, transparent 45%),
+                radial-gradient(circle at 50% 80%, #43318A 0%, transparent 50%),
+                linear-gradient(135deg, #2E2165 0%, #533C9D 50%, #7D5FC7 100%);
+    padding: 48px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    isolation: isolate;
+  }
+  /* Animated floating blobs */
+  .blob { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.6; animation: float 20s ease-in-out infinite; pointer-events: none; }
+  .blob.b1 { width: 520px; height: 520px; background: #A292D5; top: -10%; left: -10%; animation-delay: 0s; }
+  .blob.b2 { width: 380px; height: 380px; background: #654ABA; bottom: -15%; right: -10%; animation-delay: -8s; }
+  .blob.b3 { width: 280px; height: 280px; background: #FFFFFF; top: 45%; left: 40%; opacity: 0.12; animation-delay: -14s; }
+  @keyframes float {
+    0%, 100% { transform: translate(0,0) scale(1); }
+    33% { transform: translate(40px,-30px) scale(1.05); }
+    66% { transform: translate(-30px,20px) scale(0.95); }
+  }
+  /* Grid overlay subtle */
+  .grid-lines {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+    pointer-events: none;
+  }
+
+  .side-brand { position: relative; z-index: 2; display: flex; align-items: center; gap: 12px; }
+  .side-brand img { height: 30px; filter: brightness(0) invert(1); }
+  .side-brand-text { color: #fff; opacity: .9; font-size: 13px; font-weight: 500; letter-spacing: 0.02em; }
+
+  .side-hero { position: relative; z-index: 2; max-width: 520px; }
+  .side-kicker { color: rgba(255,255,255,.75); font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; }
+  .side-title {
+    font-size: 48px; font-weight: 700; line-height: 1.08; letter-spacing: -0.03em;
+    margin-top: 18px;
+    background: linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,.85) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .side-sub { color: rgba(255,255,255,.72); font-size: 16px; margin-top: 18px; max-width: 440px; line-height: 1.55; }
+  .side-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 36px; max-width: 480px; }
+  .stat-mini {
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+    backdrop-filter: blur(10px); border-radius: 14px; padding: 14px 16px;
+  }
+  .stat-mini .v { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .stat-mini .l { font-size: 11px; color: rgba(255,255,255,.65); margin-top: 2px; }
+
+  .side-foot { position: relative; z-index: 2; color: rgba(255,255,255,.5); font-size: 12px; }
+
+  /* RIGHT — form side */
+  .right {
+    background: #FAFAFC;
+    display: flex; align-items: center; justify-content: center;
+    padding: 48px 32px;
+    position: relative;
+  }
+  .right::before { content:''; position: absolute; inset: 0; background:
+    radial-gradient(circle at 10% 0%, rgba(83,60,157,.04) 0%, transparent 50%),
+    radial-gradient(circle at 90% 100%, rgba(125,95,199,.05) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .form-wrap { width: min(420px, 100%); position: relative; z-index: 1; }
+  .form-head { margin-bottom: 32px; }
+  .form-head .welcome { font-size: 14px; color: var(--ink-500); font-weight: 500; letter-spacing: 0.01em; }
+  .form-head h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.028em; color: var(--ink-900); margin-top: 6px; }
+  .form-head p { color: var(--ink-500); font-size: 14px; margin-top: 6px; }
+
+  .field { margin-bottom: 14px; position: relative; }
+  .field label {
+    display: block; font-size: 11px; font-weight: 600; color: var(--ink-500);
+    letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 6px;
+  }
+  .field .ctrl {
+    position: relative;
+    background: #fff; border: 1px solid var(--ink-200); border-radius: 12px;
+    transition: all var(--t-fast);
+  }
+  .field .ctrl:focus-within {
+    border-color: var(--brand-500);
+    box-shadow: 0 0 0 4px rgba(101,74,186,.1), 0 4px 14px -4px rgba(83,60,157,.15);
+  }
+  .field input {
+    width: 100%; height: 48px; padding: 0 16px 0 44px;
+    border: none; background: transparent; outline: none;
+    font-size: 14px; color: var(--ink-900); font-family: inherit;
+  }
+  .field .icon {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--ink-400); width: 18px; height: 18px;
+  }
+  .field .toggle {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: var(--ink-400); cursor: pointer;
+    padding: 6px; border-radius: 6px;
+  }
+  .field .toggle:hover { background: var(--ink-100); color: var(--ink-700); }
+
+  .options-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 20px; font-size: 13px; }
+  .checkbox { display: flex; align-items: center; gap: 8px; color: var(--ink-600); cursor: pointer; user-select: none; }
+  .checkbox input { width: 16px; height: 16px; accent-color: var(--brand-700); }
+
+  .submit-btn {
+    width: 100%; height: 50px; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, #533C9D 0%, #7D5FC7 100%);
+    color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 10px 24px -8px rgba(83,60,157,.5);
+    position: relative; overflow: hidden;
+    transition: transform var(--t-fast), box-shadow var(--t-fast), filter var(--t-fast);
+  }
+  .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 32px -10px rgba(83,60,157,.6); }
+  .submit-btn:active { transform: translateY(0); }
+  .submit-btn:disabled { opacity: .7; cursor: wait; }
+  .submit-btn::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.25), transparent);
+    transition: left 0.8s ease;
+  }
+  .submit-btn:hover::after { left: 120%; }
+
+  .alert {
+    padding: 12px 16px; border-radius: 12px; font-size: 13px;
+    margin-bottom: 16px; display: none;
+    background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA;
+  }
+  .alert.show { display: flex; align-items: center; gap: 10px; animation: shake 500ms; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  .divider { display: flex; align-items: center; gap: 12px; margin: 24px 0; color: var(--ink-400); font-size: 12px; }
+  .divider::before, .divider::after { content:''; flex: 1; height: 1px; background: var(--ink-200); }
+
+  .help-link { text-align: center; font-size: 12px; color: var(--ink-500); margin-top: 20px; }
+  .help-link a { color: var(--brand-700); text-decoration: none; font-weight: 500; }
+  .help-link a:hover { text-decoration: underline; }
+
+  /* Entrance animations */
+  .anim-in { animation: slideUp 700ms var(--ease-out) both; }
+  .anim-in-1 { animation-delay: 80ms; }
+  .anim-in-2 { animation-delay: 160ms; }
+  .anim-in-3 { animation-delay: 240ms; }
+  .anim-in-4 { animation-delay: 320ms; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+  .mobile-brand { display: none; }
+  @media (max-width: 900px) {
+    body { background: #fff; }
+    .right { background: #fff; padding: 24px; min-height: 100vh; }
+    .mobile-brand { display: flex; justify-content: center; margin-bottom: 32px; }
+    .mobile-brand img { height: 28px; }
+    .form-head h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="auth">
+  <!-- LEFT side with cinematic gradient -->
+  <aside class="side">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="grid-lines"></div>
+
+    <div class="side-brand anim-in">
+      <img src="/logo.svg" alt="Lavandery"/>
+      <span class="side-brand-text">· Painel de Gestão</span>
+    </div>
+
+    <div class="side-hero">
+      <div class="side-kicker anim-in anim-in-1">LAVANDERIAS COMPARTILHADAS</div>
+      <h2 class="side-title anim-in anim-in-2">Sua operação<br/>em um só lugar.</h2>
+      <p class="side-sub anim-in anim-in-3">Contratos, implantações, visitas técnicas, insumos, chamados e relatórios — tudo integrado em tempo real.</p>
+
+      <div class="side-stats anim-in anim-in-4">
+        <div class="stat-mini"><div class="v">126</div><div class="l">condomínios</div></div>
+        <div class="stat-mini"><div class="v">326</div><div class="l">visitas / ano</div></div>
+        <div class="stat-mini"><div class="v">60<span style="font-size:14px">d</span></div><div class="l">SLA implantação</div></div>
+      </div>
+    </div>
+
+    <div class="side-foot">© Lavandery · INOVA TECNOLOGIA E SERVIÇOS E REPRESENTAÇÃO LTDA.</div>
+  </aside>
+
+  <!-- RIGHT side with form -->
+  <section class="right">
+    <div class="form-wrap">
+      <div class="mobile-brand"><img src="/logo.svg" alt="Lavandery"/></div>
+
+      <div class="form-head anim-in">
+        <div class="welcome">Bem-vindo de volta 👋</div>
+        <h1>Entrar no painel</h1>
+        <p>Acesse com as credenciais da sua conta Lavandery.</p>
+      </div>
+
+      <div id="loginError" class="alert" role="alert"></div>
+
+      <form id="loginForm" class="anim-in anim-in-1">
+        <div class="field">
+          <label>E-mail</label>
+          <div class="ctrl">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <input type="email" id="email" autocomplete="email" placeholder="voce@lavandery.com.br" required autofocus/>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Senha</label>
+          <div class="ctrl">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="password" autocomplete="current-password" placeholder="••••••••" required/>
+            <button type="button" class="toggle" id="togglePass" aria-label="Mostrar senha">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="options-row">
+          <label class="checkbox"><input type="checkbox" id="remember" checked/> Manter conectado</label>
+          <a href="#" style="color:var(--brand-700);font-size:12px;text-decoration:none" onclick="alert('Entre em contato com o administrador para redefinir.');return false">Esqueci a senha</a>
+        </div>
+
+        <button class="submit-btn anim-in anim-in-3" type="submit" id="submitBtn">
+          <span id="submitLabel">Entrar no painel</span>
+        </button>
+
+        <div class="divider">ou</div>
+
+        <div class="help-link">
+          É técnico em campo? <a href="/index.html">Acessar app do técnico</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<script>
+const nextUrl = new URLSearchParams(location.search).get('next') || '/admin.html';
+// Se já estiver logado, pula
+fetch('/api/auth/me').then(r => { if (r.ok) r.json().then(d => location.href = d.user?.role==='tecnico' ? '/index.html' : nextUrl); }).catch(()=>{});
+
+const form = document.querySelector('#loginForm');
+const btn = document.querySelector('#submitBtn');
+const lbl = document.querySelector('#submitLabel');
+const err = document.querySelector('#loginError');
+
+document.querySelector('#togglePass').addEventListener('click', () => {
+  const i = document.querySelector('#password');
+  i.type = i.type === 'password' ? 'text' : 'password';
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  err.classList.remove('show');
+  btn.disabled = true; lbl.textContent = 'Autenticando...';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        email: document.querySelector('#email').value.trim(),
+        password: document.querySelector('#password').value
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      const msg = r.status === 429 ? 'Muitas tentativas. Aguarde 1 minuto.' :
+                  r.status === 401 ? 'E-mail ou senha incorretos.' :
+                  (d.error || 'Erro ao entrar');
+      throw new Error(msg);
+    }
+    lbl.textContent = '✓ Entrou';
+    setTimeout(() => {
+      if (d.user?.role === 'tecnico') location.href = '/index.html';
+      else location.href = nextUrl;
+    }, 300);
+  } catch(ex) {
+    err.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> ${ex.message}`;
+    err.classList.add('show');
+    btn.disabled = false; lbl.textContent = 'Entrar no painel';
+  }
+});
+</script>
+</body>
+</html>

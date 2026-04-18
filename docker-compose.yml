@@ -1,0 +1,14 @@
+services:
+  lavandery:
+    build: .
+    image: lavandery/inspecao:latest
+    container_name: lavandery
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - server/.env
+    volumes:
+      - lavandery-data:/data
+volumes:
+  lavandery-data:

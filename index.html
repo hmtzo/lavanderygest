@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#533C9D" />
+<title>Lavandery — Inspeção Técnica</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+ tailwind.config = {
+  theme: {
+   extend: {
+    fontFamily: { sans: ['Inter','-apple-system','SF Pro Text','system-ui','sans-serif'] },
+    colors: {
+     brand: { DEFAULT: '#533C9D', 400:'#A292D5', 500:'#654ABA', 600:'#533C9D', 700:'#43318A', 50:'#F0EDF9', 100:'#E0DBF1' },
+     success: '#16A34A',
+     danger: '#DC2626',
+     neutral100: '#F3F4F6'
+    },
+    boxShadow: { card: '0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06)' }
+   }
+  }
+ }
+</script>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-white text-gray-900 font-sans antialiased min-h-screen">
+  <div id="app"></div>
+  <script src="app.js"></script>
+</body>
+</html>
