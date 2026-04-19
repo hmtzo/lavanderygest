@@ -31,8 +31,8 @@
   --bg:      #FAF7FF;
 
   /* Glass — branco levemente tingido de lilás */
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
   --glass-border: rgba(125, 95, 199, 0.14);
   --glass-border-strong: rgba(125, 95, 199, 0.22);
   --glass-blur: saturate(180%) blur(16px);

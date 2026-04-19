@@ -10,8 +10,7 @@
     css.textContent = `
       .global-bubbles {
         position: fixed; inset: 0; width: 100vw; height: 100vh;
-        pointer-events: none; z-index: 9999; overflow: hidden;
-        mix-blend-mode: multiply;
+        pointer-events: none; z-index: -1; overflow: hidden;
       }
       .global-bubbles svg { width: 100%; height: 100%; display: block; }
       .global-bubbles circle {
