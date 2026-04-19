@@ -1778,6 +1778,40 @@ app.post('/api/condominiums/import', (req, res) => {
   res.json({ ok: true, imported: items.length });
 });
 
+// One-shot: relê contract_cache e atualiza nomes dos condos com o CONTRATANTE extraído
+app.post('/api/condominiums/refresh-names', (req, res) => {
+  const cleanName = (n) => {
+    if (!n) return null;
+    let s = String(n).trim();
+    // Title case (preserva siglas conhecidas)
+    s = s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    // Mantém preposições minúsculas
+    s = s.replace(/\b(De|Da|Do|Dos|Das|E)\b/g, m => m.toLowerCase());
+    // Garante que primeira letra é maiúscula
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+    return s.trim();
+  };
+  const rows = db.prepare(`SELECT c.id, c.name as old_name, cc.extracted
+    FROM condominiums c
+    JOIN contract_cache cc ON cc.document_id = c.autentique_doc_id
+    WHERE c.autentique_doc_id IS NOT NULL`).all();
+  const upd = db.prepare('UPDATE condominiums SET name=? WHERE id=?');
+  const out = [];
+  const tx = db.transaction(() => {
+    for (const r of rows) {
+      let extracted = null;
+      try { extracted = JSON.parse(r.extracted||'null'); } catch {}
+      const newName = cleanName(extracted?.name);
+      if (newName && newName !== r.old_name) {
+        upd.run(newName, r.id);
+        out.push({ id: r.id, from: r.old_name, to: newName });
+      }
+    }
+  });
+  tx();
+  res.json({ updated: out.length, samples: out.slice(0, 10) });
+});
+
 // ----- Autentique tracking table -----
 db.exec(`CREATE TABLE IF NOT EXISTS autentique_docs (
   visit_id TEXT PRIMARY KEY,
