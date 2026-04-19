@@ -616,3 +616,17 @@ h3 { font-size: 16px; line-height: 1.4; }
 .dn-panel b { display: block; font-size: 13px; font-weight: 600; color: var(--ink-900); }
 .dn-panel small { display: block; font-size: 11px; color: var(--ink-500); margin-top: 1px; }
 @media (max-width: 900px) { .dn-nav { display: none; } }
+
+/* Tooltips de condomínios no mapa Leaflet (sempre visível) */
+.leaflet-tooltip.condoLabel {
+  background: rgba(255,255,255,.95);
+  border: 1px solid var(--ink-200);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-900);
+  box-shadow: 0 2px 6px rgba(0,0,0,.08);
+  white-space: nowrap;
+}
+.leaflet-tooltip.condoLabel::before { display: none; }

@@ -230,7 +230,7 @@
     </div>
   </section>
 
-  <!-- Globo 3D com condomínios -->
+  <!-- Globo 3D com nomes dos condomínios -->
   <section class="card-new stagger" style="margin-bottom:16px;overflow:hidden">
     <div class="card-header">
       <div>
@@ -239,8 +239,9 @@
       </div>
     </div>
     <div style="display:flex;justify-content:center;padding:8px 0">
-      <div style="width:min(420px,100%);aspect-ratio:1/1">
+      <div id="globeWrap" style="position:relative;width:min(460px,100%);aspect-ratio:1/1">
         <canvas id="globeCanvas" style="width:100%;height:100%;cursor:grab;opacity:0;transition:opacity 1.2s ease;border-radius:50%;touch-action:none"></canvas>
+        <div id="globeLabels" style="position:absolute;inset:0;pointer-events:none"></div>
       </div>
     </div>
   </section>
@@ -1751,10 +1752,11 @@ document.addEventListener('click', (e) => {
   if (dn) { showTab(dn.dataset.tab); dn.closest('.dn-item')?.blur(); }
 });
 
-// ---------- Globo 3D (cobe) ----------
+// ---------- Globo 3D (cobe) com labels dos condomínios ----------
 let _globeInstance = null;
 async function initGlobe() {
   const canvas = document.querySelector('#globeCanvas');
+  const labelHost = document.querySelector('#globeLabels');
   if (!canvas || _globeInstance) return;
   let createGlobe;
   try {
@@ -1762,20 +1764,27 @@ async function initGlobe() {
     createGlobe = m.default;
   } catch (e) { console.warn('cobe load failed', e); return; }
 
-  // Pega condomínios com lat/lng (geocoded)
+  // Pega condomínios geocodificados
   let condos = [];
   try { condos = await fetch('/api/condominiums').then(r=>r.ok?r.json():[]); } catch {}
-  const markers = condos
-    .filter(c => c.lat && c.lng)
-    .slice(0, 50)
-    .map(c => ({ location: [Number(c.lat), Number(c.lng)], size: 0.04 }));
-  // Fallback: Brasil central
-  if (!markers.length) markers.push({ location: [-23.5505, -46.6333], size: 0.05 });
+  const geo = condos.filter(c => c.lat && c.lng);
+  const markers = geo.slice(0, 80).map(c => ({ location:[+c.lat,+c.lng], size:0.04, name:c.name }));
+  // Top 12 com label visível (subset pra não poluir)
+  const labeled = geo.slice(0, 12);
+  const colors = ['#7B47D9','#E84855','#2A9D8F','#F4A261','#264653','#9D4EDD','#457B9D','#E63946','#D4A373','#7B2CBF','#06B6D4','#F59E0B'];
 
-  let phi = 0, width = 0;
+  // Cria divs flutuantes pra cada label
+  const labelEls = labeled.map((c, i) => {
+    const el = document.createElement('div');
+    el.style.cssText = `position:absolute;padding:3px 8px;background:${colors[i%colors.length]};color:#fff;font-size:11px;font-weight:600;font-family:ui-rounded,'SF Pro Rounded',system-ui,sans-serif;border-radius:5px;white-space:nowrap;pointer-events:none;transform:translate(-50%,-150%) rotate(${(i%2?1:-1)*((i*3)%6)}deg);box-shadow:0 1px 3px rgba(0,0,0,.2),0 3px 8px rgba(0,0,0,.1);text-shadow:0 1px 1px rgba(0,0,0,.25);transition:opacity .25s ease, filter .25s ease;will-change:transform,opacity`;
+    el.textContent = c.name.replace(/^Condom[ií]nio\s+/i, '');
+    labelHost.appendChild(el);
+    return { el, lat: +c.lat * Math.PI/180, lng: +c.lng * Math.PI/180 };
+  });
+
+  let phi = 0, width = canvas.offsetWidth || 460;
   const ro = new ResizeObserver(() => { width = canvas.offsetWidth; });
   ro.observe(canvas);
-  width = canvas.offsetWidth || 400;
 
   const dragRef = { x: null, phiOff: 0, dragging: false };
   canvas.addEventListener('pointerdown', (e) => { dragRef.x = e.clientX; dragRef.dragging = true; canvas.style.cursor = 'grabbing'; });
@@ -1787,16 +1796,46 @@ async function initGlobe() {
     }
   }, { passive: true });
 
+  // Projeção lat/lng → coords no canvas (esfera com rotação phi e tilt theta)
+  const THETA = 0.25;
+  function project(lat, lng, phiNow) {
+    const sinL = Math.sin(lat), cosL = Math.cos(lat);
+    const lngR = lng + phiNow + Math.PI/2;
+    const x = cosL * Math.cos(lngR);
+    const y = sinL;
+    const z = cosL * Math.sin(lngR);
+    // tilt no eixo X
+    const cosT = Math.cos(THETA), sinT = Math.sin(THETA);
+    const yT = y*cosT - z*sinT;
+    const zT = y*sinT + z*cosT;
+    return { x, y: yT, z: zT };
+  }
+  function updateLabels() {
+    const r = canvas.getBoundingClientRect();
+    const cx = r.width/2, cy = r.height/2;
+    const radius = Math.min(cx, cy) * 0.96; // raio visível
+    const phiNow = -phi - dragRef.phiOff; // cobe gira para oeste
+    for (const m of labelEls) {
+      const p = project(m.lat, m.lng, phiNow);
+      if (p.z > 0.05) {
+        const px = cx + p.x * radius;
+        const py = cy - p.y * radius;
+        m.el.style.left = px + 'px';
+        m.el.style.top = py + 'px';
+        m.el.style.opacity = '1';
+        m.el.style.filter = 'blur(0)';
+      } else {
+        m.el.style.opacity = '0';
+        m.el.style.filter = 'blur(8px)';
+      }
+    }
+  }
+
   _globeInstance = createGlobe(canvas, {
-    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-    width: width * 2,
-    height: width * 2,
-    phi: 0,
-    theta: 0.25,
-    dark: 0,
-    diffuse: 1.5,
-    mapSamples: 16000,
-    mapBrightness: 8,
+    devicePixelRatio: Math.min(window.devicePixelRatio||1, 2),
+    width: width*2, height: width*2,
+    phi: 0, theta: THETA, dark: 0, diffuse: 1.5,
+    mapSamples: 16000, mapBrightness: 8,
     baseColor: [0.96, 0.94, 1],
     markerColor: [0.55, 0.27, 0.95],
     glowColor: [0.92, 0.88, 1],
@@ -1804,13 +1843,12 @@ async function initGlobe() {
     onRender: (state) => {
       if (!dragRef.dragging) phi += 0.003;
       state.phi = phi + dragRef.phiOff;
-      state.width = width * 2;
-      state.height = width * 2;
+      state.width = width*2; state.height = width*2;
+      updateLabels();
     },
   });
   setTimeout(() => { canvas.style.opacity = '1'; }, 50);
 }
-// Init imediato (script roda já com DOM pronto)
 setTimeout(initGlobe, 600);
 
 // ---------- Tabs ----------
@@ -3101,7 +3139,8 @@ async function renderAllCondosOnMap() {
   if (!geo.length) return;
   const markers = geo.map(c => {
     const m = L.circleMarker([c.lat, c.lng], { radius: 6, color:'#533C9D', weight: 2, fillColor:'#A292D5', fillOpacity: .8 })
-      .bindPopup(`<b>${escHTML(c.name)}</b><br>${escHTML(c.address||'')}<br>${escHTML(c.city||'')}<br>${(c.washers||0)}L + ${(c.dryers||0)}S · ${escHTML(c.maintenance_label||'Semestral')}`);
+      .bindPopup(`<b>${escHTML(c.name)}</b><br>${escHTML(c.address||'')}<br>${escHTML(c.city||'')}<br>${(c.washers||0)}L + ${(c.dryers||0)}S · ${escHTML(c.maintenance_label||'Semestral')}`)
+      .bindTooltip(escHTML(c.name), { permanent: true, direction: 'right', offset: [8, 0], className: 'condoLabel' });
     m.addTo(leafletMap);
     mapLayers.push(m);
     return m;
