@@ -230,21 +230,6 @@
     </div>
   </section>
 
-  <!-- Globo 3D com nomes dos condomínios -->
-  <section class="card-new stagger" style="margin-bottom:16px;overflow:hidden">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Mapa global de operação</div>
-        <div class="subtle" style="font-size:12px;margin-top:2px">Condomínios atendidos · arraste pra girar</div>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:center;padding:8px 0">
-      <div id="globeWrap" style="position:relative;width:min(460px,100%);aspect-ratio:1/1">
-        <canvas id="globeCanvas" style="width:100%;height:100%;cursor:grab;opacity:0;transition:opacity 1.2s ease;border-radius:50%;touch-action:none"></canvas>
-        <div id="globeLabels" style="position:absolute;inset:0;pointer-events:none"></div>
-      </div>
-    </div>
-  </section>
 
   <section class="stagger" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     <div class="card-new">
@@ -1849,7 +1834,7 @@ async function initGlobe() {
   });
   setTimeout(() => { canvas.style.opacity = '1'; }, 50);
 }
-setTimeout(initGlobe, 600);
+// globo removido
 
 // ---------- Tabs ----------
 const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos' };
