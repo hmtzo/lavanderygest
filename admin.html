@@ -198,6 +198,21 @@
     </div>
   </section>
 
+  <!-- Globo 3D com condomínios -->
+  <section class="card-new stagger" style="margin-bottom:16px;overflow:hidden">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Mapa global de operação</div>
+        <div class="subtle" style="font-size:12px;margin-top:2px">Condomínios atendidos · arraste pra girar</div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:center;padding:8px 0">
+      <div style="width:min(420px,100%);aspect-ratio:1/1">
+        <canvas id="globeCanvas" style="width:100%;height:100%;cursor:grab;opacity:0;transition:opacity 1.2s ease;border-radius:50%;touch-action:none"></canvas>
+      </div>
+    </div>
+  </section>
+
   <section class="stagger" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     <div class="card-new">
       <div class="card-header">
@@ -1701,6 +1716,69 @@ document.addEventListener('click', (e) => {
   const li = e.target.closest('.gm-item[data-tab]');
   if (li) showTab(li.dataset.tab);
 });
+
+// ---------- Globo 3D (cobe) ----------
+let _globeInstance = null;
+async function initGlobe() {
+  const canvas = document.querySelector('#globeCanvas');
+  if (!canvas || _globeInstance) return;
+  let createGlobe;
+  try {
+    const m = await import('https://esm.sh/cobe@0.6.3');
+    createGlobe = m.default;
+  } catch (e) { console.warn('cobe load failed', e); return; }
+
+  // Pega condomínios com lat/lng (geocoded)
+  let condos = [];
+  try { condos = await fetch('/api/condominiums').then(r=>r.ok?r.json():[]); } catch {}
+  const markers = condos
+    .filter(c => c.lat && c.lng)
+    .slice(0, 50)
+    .map(c => ({ location: [Number(c.lat), Number(c.lng)], size: 0.04 }));
+  // Fallback: Brasil central
+  if (!markers.length) markers.push({ location: [-23.5505, -46.6333], size: 0.05 });
+
+  let phi = 0, width = 0;
+  const ro = new ResizeObserver(() => { width = canvas.offsetWidth; });
+  ro.observe(canvas);
+  width = canvas.offsetWidth || 400;
+
+  const dragRef = { x: null, phiOff: 0, dragging: false };
+  canvas.addEventListener('pointerdown', (e) => { dragRef.x = e.clientX; dragRef.dragging = true; canvas.style.cursor = 'grabbing'; });
+  window.addEventListener('pointerup', () => { dragRef.dragging = false; canvas.style.cursor = 'grab'; });
+  window.addEventListener('pointermove', (e) => {
+    if (dragRef.dragging && dragRef.x != null) {
+      dragRef.phiOff += (e.clientX - dragRef.x) / 200;
+      dragRef.x = e.clientX;
+    }
+  }, { passive: true });
+
+  _globeInstance = createGlobe(canvas, {
+    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+    width: width * 2,
+    height: width * 2,
+    phi: 0,
+    theta: 0.25,
+    dark: 0,
+    diffuse: 1.5,
+    mapSamples: 16000,
+    mapBrightness: 8,
+    baseColor: [0.96, 0.94, 1],
+    markerColor: [0.55, 0.27, 0.95],
+    glowColor: [0.92, 0.88, 1],
+    markers,
+    onRender: (state) => {
+      if (!dragRef.dragging) phi += 0.003;
+      state.phi = phi + dragRef.phiOff;
+      state.width = width * 2;
+      state.height = width * 2;
+    },
+  });
+  setTimeout(() => { canvas.style.opacity = '1'; }, 50);
+}
+// Init quando dashboard estiver visível
+const _origShowTabForGlobe = window.showTab;
+document.addEventListener('DOMContentLoaded', () => { setTimeout(initGlobe, 800); });
 
 // ---------- Tabs ----------
 const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos' };
