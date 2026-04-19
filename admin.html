@@ -1098,8 +1098,10 @@ function renderAlertsList(alerts) {
     if (el.dataset.tab) showTab(el.dataset.tab);
   }));
 }
-// Modo agressivo — grita ao ouvido do admin
+// Modo discreto por padrão — só grita se o usuário explicitamente ligar
 function isAggressive() { return localStorage.getItem('aggressive_mode') === '1'; }
+// Default OFF: se nunca foi definido, força '0'
+if (localStorage.getItem('aggressive_mode') == null) localStorage.setItem('aggressive_mode', '0');
 function setAggressive(v) { localStorage.setItem('aggressive_mode', v?'1':'0'); const el = document.querySelector('#aggressiveMode'); if (el) el.checked = v; }
 
 // Gerar um beep em loop via WebAudio (sem depender de arquivo)
@@ -1133,6 +1135,8 @@ async function ensureNotifPermission() {
   const p = await Notification.requestPermission(); return p === 'granted';
 }
 async function desktopNotify(a) {
+  // Só dispara notificação desktop se o modo agressivo estiver ligado explicitamente
+  if (!isAggressive()) return;
   if (!(await ensureNotifPermission())) return;
   try {
     const n = new Notification(`🚨 ${a.title}`, { body: a.body, icon: '/logo.svg', tag: a.id, requireInteraction: a.severity === 'critical' });
@@ -1140,46 +1144,44 @@ async function desktopNotify(a) {
   } catch {}
 }
 
-// Popup bloqueante para alertas críticos (precisa Reconhecer)
-function showAlertPopup(a) {
-  const host = document.createElement('div');
-  host.className = 'cmdk-overlay open';
-  host.style.zIndex = '200';
-  host.innerHTML = `
-    <div class="cmdk-dialog open" style="background:#fff;max-width:480px;top:20%;border-top:4px solid var(--danger);animation:scaleIn 300ms var(--ease-out)">
-      <div style="padding:24px">
-        <div style="display:flex;align-items:flex-start;gap:14px">
-          <div style="width:44px;height:44px;background:rgba(239,68,68,.1);color:var(--danger);display:grid;place-items:center;border-radius:10px;font-size:22px;flex-shrink:0">🚨</div>
-          <div style="flex:1">
-            <div style="font-size:12px;font-weight:600;color:var(--danger);text-transform:uppercase;letter-spacing:.05em">${a.severity==='critical'?'Crítico':'Alto'}</div>
-            <div style="font-size:18px;font-weight:600;color:var(--ink-900);margin-top:4px">${esc(a.title)}</div>
-            <div style="font-size:14px;color:var(--ink-600);margin-top:6px">${esc(a.body)}</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
-          <button class="btn-new ghost" id="__ackGo">Ver detalhes</button>
-          <button class="btn-new brand" id="__ackBtn">Reconhecer e silenciar</button>
-        </div>
-      </div>
-    </div>`;
-  document.body.appendChild(host);
-  const cleanup = async () => { stopAlarm(); await fetch('/api/alerts/'+encodeURIComponent(a.id)+'/ack', { method:'POST' }).catch(()=>{}); host.remove(); };
-  host.querySelector('#__ackBtn').addEventListener('click', cleanup);
-  host.querySelector('#__ackGo').addEventListener('click', () => { cleanup(); if (a.action_tab) showTab(a.action_tab); });
-  if (a.severity === 'critical' && isAggressive()) startAlarm();
+// Toast discreto no canto inferior direito — sem bloquear nada
+function ensureToastStack() {
+  let s = document.querySelector('#toastStack');
+  if (!s) {
+    s = document.createElement('div');
+    s.id = 'toastStack';
+    s.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:340px';
+    document.body.appendChild(s);
+  }
+  return s;
 }
-
+function showAlertPopup(a) { fireCriticalToast(a); } // compat: rotas antigas
 function fireCriticalToast(a) {
-  // Popup bloqueante sempre pra crítico
-  if (a.severity === 'critical') { showAlertPopup(a); desktopNotify(a); return; }
-  // Outros: toast + notificação desktop
+  const stack = ensureToastStack();
+  const sev = a.severity || 'info';
+  const colors = { critical:'#ef4444', high:'#f59e0b', info:'#6366f1' };
+  const icons  = { critical:'🚨', high:'⚠️', info:'ℹ️' };
   const t = document.createElement('div');
-  t.className = 'toast-new ' + (a.severity==='high'?'danger':'');
-  t.style.cssText += ';max-width:380px';
-  t.innerHTML = `<div style="font-size:18px">${a.severity==='high'?'⚠️':'ℹ️'}</div><div style="flex:1"><div style="font-weight:600">${esc(a.title)}</div><div style="font-size:12px;opacity:.9;margin-top:2px">${esc(a.body)}</div></div><button style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px" onclick="this.parentElement.remove()">OK</button>`;
-  document.body.appendChild(t);
-  desktopNotify(a);
-  setTimeout(()=>t.remove(), 12000);
+  t.style.cssText = `pointer-events:auto;background:#fff;border-left:3px solid ${colors[sev]||colors.info};border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px 14px;display:flex;gap:10px;align-items:flex-start;font-size:13px;animation:toastSlideIn .3s ease;max-width:340px`;
+  t.innerHTML = `
+    <div style="font-size:18px;line-height:1">${icons[sev]||icons.info}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;color:#1f2937;font-size:13px">${esc(a.title||'')}</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;overflow-wrap:anywhere">${esc(a.body||'')}</div>
+    </div>
+    <button aria-label="Fechar" style="background:transparent;border:none;color:#9ca3af;font-size:16px;cursor:pointer;padding:0;line-height:1">×</button>
+  `;
+  t.querySelector('button').addEventListener('click', async () => {
+    if (a.id) await fetch('/api/alerts/'+encodeURIComponent(a.id)+'/ack', { method:'POST' }).catch(()=>{});
+    t.remove();
+  });
+  if (a.action_tab) {
+    t.style.cursor = 'pointer';
+    t.addEventListener('click', (e) => { if (e.target.tagName !== 'BUTTON') showTab(a.action_tab); });
+  }
+  stack.appendChild(t);
+  // auto-dismiss: critical 15s, demais 8s
+  setTimeout(() => t.remove(), sev === 'critical' ? 15000 : 8000);
 }
 function openAlertsPanel() { document.querySelector('#alertsPanel').style.display = 'block'; }
 function closeAlertsPanel() { document.querySelector('#alertsPanel').style.display = 'none'; }

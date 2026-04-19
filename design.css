@@ -563,3 +563,9 @@ h3 { font-size: 16px; line-height: 1.4; }
   white-space: nowrap;
 }
 .gm-item:hover .gm-title { transform: scale(1); }
+
+/* Toast discreto no canto inferior direito */
+@keyframes toastSlideIn {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
