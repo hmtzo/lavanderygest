@@ -1783,12 +1783,21 @@ app.post('/api/condominiums/refresh-names', (req, res) => {
   const cleanName = (n) => {
     if (!n) return null;
     let s = String(n).trim();
-    // Title case (preserva siglas conhecidas)
-    s = s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-    // Mantém preposições minúsculas
-    s = s.replace(/\b(De|Da|Do|Dos|Das|E)\b/g, m => m.toLowerCase());
-    // Garante que primeira letra é maiúscula
-    s = s.charAt(0).toUpperCase() + s.slice(1);
+    // Remove prefixos comuns
+    s = s.replace(/^contrato[-\s_]+comodato[-\s_]+/i, '')
+         .replace(/\s*\(\d+\)\s*$/g, '').trim();
+    // Title case Unicode-aware (split por espaços, capitaliza primeira letra de cada palavra)
+    s = s.toLowerCase().split(/\s+/).map(w => {
+      if (!w) return w;
+      // primeira letra (mesmo se for acentuada) maiúscula, resto minúsculo
+      return w.charAt(0).toLocaleUpperCase('pt-BR') + w.slice(1);
+    }).join(' ');
+    // Preposições/artigos minúsculos no meio
+    s = s.replace(/(\s)(De|Da|Do|Dos|Das|E|Em|Na|No)(?=\s)/g, (_,sp,w) => sp + w.toLowerCase());
+    // Siglas comuns SEMPRE em caixa alta (BY EZ, SP, RJ, etc)
+    s = s.replace(/\bBy\b/g, 'BY').replace(/\bEz\b/g, 'EZ');
+    // Primeira letra sempre maiúscula
+    s = s.charAt(0).toLocaleUpperCase('pt-BR') + s.slice(1);
     return s.trim();
   };
   const rows = db.prepare(`SELECT c.id, c.name as old_name, cc.extracted
