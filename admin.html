@@ -1286,10 +1286,53 @@ document.addEventListener('click', (e) => {
 });
 document.querySelector('#alertsRefresh')?.addEventListener('click', () => loadAlerts(false));
 document.querySelector('#alertsClearAll')?.addEventListener('click', async () => {
-  await fetch('/api/alerts/ack-all', { method:'POST' }).catch(()=>{});
-  clearAllToasts();
-  loadAlerts(false);
-  Toast.success('Todas as notificações foram limpas');
+  try {
+    const r = await fetch('/api/alerts/ack-all', { method:'POST' });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    clearAllToasts();
+    // Some silencioso o painel de alertas
+    document.querySelector('#alertsList').innerHTML = `<div style="padding:36px 20px;text-align:center;color:var(--ink-400)"><div style="font-size:28px;opacity:.5">✓</div><div style="font-size:13px;margin-top:6px">Tudo em ordem</div></div>`;
+    document.querySelector('#bellBadge').style.display = 'none';
+    document.querySelector('#alertsSummary').textContent = '0 críticos · 0 altos · 0 médios · 0 info';
+    closeAlertsPanel();
+    Toast.success('Todas as notificações foram limpas');
+  } catch(e) {
+    Toast.error('Falha ao limpar: ' + e.message);
+  }
+});
+
+// Botão "+ Novo" — menu popup com atalhos de criação
+document.querySelector('#newTicketGlobal')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const existing = document.querySelector('#quickCreateMenu');
+  if (existing) { existing.remove(); return; }
+  const r = e.currentTarget.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.id = 'quickCreateMenu';
+  menu.style.cssText = `position:fixed;top:${r.bottom + 6}px;right:${window.innerWidth - r.right}px;background:#fff;border:1px solid var(--ink-200);border-radius:12px;box-shadow:var(--shadow-xl);z-index:200;min-width:220px;padding:6px;animation:fadeSlideDown .2s ease`;
+  const items = [
+    { ico:'🎫', label:'Novo chamado',      tab:'tickets' },
+    { ico:'🏢', label:'Novo condomínio',   tab:'condos' },
+    { ico:'📅', label:'Nova visita',        tab:'schedule' },
+    { ico:'🏗️', label:'Nova implantação',   tab:'implantations' },
+    { ico:'📦', label:'Nova entrega',       tab:'deliveries' },
+  ];
+  menu.innerHTML = items.map(i => `
+    <button data-tab="${i.tab}" style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:13px;color:var(--ink-900);text-align:left">
+      <span style="font-size:16px">${i.ico}</span><span>${i.label}</span>
+    </button>
+  `).join('');
+  menu.querySelectorAll('button').forEach(b => {
+    b.addEventListener('mouseenter', () => b.style.background = 'var(--ink-50)');
+    b.addEventListener('mouseleave', () => b.style.background = 'transparent');
+    b.addEventListener('click', () => { showTab(b.dataset.tab); menu.remove(); });
+  });
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    document.addEventListener('click', function closeIt(ev) {
+      if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closeIt); }
+    });
+  }, 0);
 });
 
 // Start polling: contagem do sino a cada 5min, popup de novos alertas a cada 1h30

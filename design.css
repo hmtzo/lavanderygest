@@ -652,3 +652,8 @@ h3 { font-size: 16px; line-height: 1.4; }
   50%  { opacity: calc(var(--hb-op, .4) * .55); transform: translate(var(--hb-x, 20px), var(--hb-y, -15px)) scale(1.2); }
   100% { opacity: var(--hb-op, .4); transform: translate(calc(var(--hb-x, 20px) * -.5), calc(var(--hb-y, -15px) * .7)) scale(0.9); }
 }
+
+@keyframes fadeSlideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
