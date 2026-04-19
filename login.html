@@ -31,6 +31,14 @@
     display: flex; flex-direction: column; justify-content: space-between;
     isolation: isolate;
   }
+  /* Floating bubbles SVG layer */
+  .bubbles-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+  .bubbles-svg circle { transform-origin: center; animation: bubbleFloat var(--bf-d, 12s) ease-in-out infinite alternate; }
+  @keyframes bubbleFloat {
+    0%   { opacity: 0.7; transform: translate(0,0) scale(1); }
+    50%  { opacity: 0.3; transform: translate(var(--bf-x, 30px), var(--bf-y, -20px)) scale(1.15); }
+    100% { opacity: 0.7; transform: translate(calc(var(--bf-x, 30px) * -.5), calc(var(--bf-y, -20px) * .8)) scale(0.95); }
+  }
   /* Animated floating blobs */
   .blob { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.6; animation: float 20s ease-in-out infinite; pointer-events: none; }
   .blob.b1 { width: 520px; height: 520px; background: #A292D5; top: -10%; left: -10%; animation-delay: 0s; }
@@ -191,6 +199,8 @@
     <div class="blob b2"></div>
     <div class="blob b3"></div>
     <div class="grid-lines"></div>
+    <!-- Floating bubbles SVG (portado de 21st-dev/floating-bubbles) -->
+    <svg class="bubbles-svg" preserveAspectRatio="none" aria-hidden="true"></svg>
 
     <div class="side-brand anim-in">
       <img src="/logo.svg" alt="Lavandery"/>
@@ -268,6 +278,30 @@
 const nextUrl = new URLSearchParams(location.search).get('next') || '/admin.html';
 // Se já estiver logado, pula
 fetch('/api/auth/me').then(r => { if (r.ok) r.json().then(d => location.href = d.user?.role==='tecnico' ? '/index.html' : nextUrl); }).catch(()=>{});
+
+// Gera bolhas flutuantes SVG (portado de 21st-dev)
+(function() {
+  const svg = document.querySelector('.bubbles-svg');
+  if (!svg) return;
+  const aside = svg.parentElement;
+  const W = aside.offsetWidth || 600, H = aside.offsetHeight || 800;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const COUNT = 40;
+  const palette = ['rgba(168,134,235,', 'rgba(196,168,242,', 'rgba(122,82,210,', 'rgba(255,255,255,'];
+  for (let i = 0; i < COUNT; i++) {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const x = Math.random() * W, y = Math.random() * H;
+    const r = 4 + Math.random() * 18;
+    const col = palette[Math.floor(Math.random() * palette.length)] + (0.15 + Math.random() * 0.25) + ')';
+    c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', r);
+    c.setAttribute('fill', col);
+    c.style.setProperty('--bf-d', (8 + Math.random() * 14) + 's');
+    c.style.setProperty('--bf-x', (Math.random() * 80 - 40) + 'px');
+    c.style.setProperty('--bf-y', (Math.random() * 80 - 40) + 'px');
+    c.style.animationDelay = (-Math.random() * 10) + 's';
+    svg.appendChild(c);
+  }
+})();
 
 const form = document.querySelector('#loginForm');
 const btn = document.querySelector('#submitBtn');
