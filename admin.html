@@ -1291,9 +1291,10 @@ document.querySelector('#alertsClearAll')?.addEventListener('click', async () =>
   Toast.success('Todas as notificações foram limpas');
 });
 
-// Start polling every 30s
+// Start polling: contagem do sino a cada 5min, popup de novos alertas a cada 1h30
 loadAlerts(false);
-_alertsPoll = setInterval(() => loadAlerts(true), 30_000);
+setInterval(() => loadAlerts(false), 5 * 60_000);          // refresh silencioso pro sino
+_alertsPoll = setInterval(() => loadAlerts(true), 90 * 60_000); // popup a cada 90min
 
 // Modo agressivo toggle + desktop notif permission
 document.addEventListener('DOMContentLoaded', () => {
@@ -1311,8 +1312,8 @@ document.addEventListener('DOMContentLoaded', () => {
     fireCriticalToast({ id:'test-'+Date.now(), severity:'critical', title:'Teste de alerta crítico', body:'Se você está vendo isto, o sistema está gritando certinho.', action_tab:'dash' });
   });
 });
-// Re-trigger on tab focus so poll fires quando voltar da outra aba
-document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAlerts(true); });
+// Re-trigger on tab focus: refresh contagem mas SEM popup (popup é só a cada 90min)
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAlerts(false); });
 
 // ---------- Modal/Drawer plumbing ----------
 function openModal(el, html) { el.innerHTML = html; document.querySelector('#overlay').classList.add('show'); el.classList.add('show'); }
