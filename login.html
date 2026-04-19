@@ -113,73 +113,93 @@
 
   /* RIGHT — form side */
   .right {
-    background: #FAFAFC;
+    background: linear-gradient(180deg, #FAFAFC 0%, #F4F0FA 100%);
     display: flex; align-items: center; justify-content: center;
     padding: 48px 32px;
     position: relative;
   }
   .right::before { content:''; position: absolute; inset: 0; background:
-    radial-gradient(circle at 10% 0%, rgba(83,60,157,.04) 0%, transparent 50%),
-    radial-gradient(circle at 90% 100%, rgba(125,95,199,.05) 0%, transparent 50%);
+    radial-gradient(circle at 10% 0%, rgba(83,60,157,.06) 0%, transparent 55%),
+    radial-gradient(circle at 90% 100%, rgba(125,95,199,.08) 0%, transparent 55%);
     pointer-events: none;
   }
 
-  .form-wrap { width: min(420px, 100%); position: relative; z-index: 1; }
-  .form-head { margin-bottom: 32px; }
-  .form-head .welcome { font-size: 14px; color: var(--ink-500); font-weight: 500; letter-spacing: 0.01em; }
-  .form-head h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.028em; color: var(--ink-900); margin-top: 6px; }
-  .form-head p { color: var(--ink-500); font-size: 14px; margin-top: 6px; }
+  /* Card central com glassmorphism suave */
+  .form-wrap {
+    width: min(440px, 100%); position: relative; z-index: 1;
+    background: rgba(255,255,255,.8);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,.9);
+    border-radius: 28px;
+    padding: 44px 38px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.9) inset,
+      0 30px 60px -20px rgba(83,60,157,.18),
+      0 8px 24px -8px rgba(83,60,157,.08);
+  }
+  .form-head { margin-bottom: 28px; text-align: center; }
+  .form-head .welcome { font-size: 13px; color: #7E7798; font-weight: 500; letter-spacing: 0.02em; }
+  .form-head h1 {
+    font-size: 28px; font-weight: 700; letter-spacing: -0.028em;
+    color: #1F1A33; margin-top: 6px;
+    background: linear-gradient(135deg, #2E2165 0%, #7B5FC7 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .form-head p { color: #8B85A1; font-size: 13px; margin-top: 8px; }
 
-  .field { margin-bottom: 16px; position: relative; }
+  .field { margin-bottom: 14px; position: relative; }
   .field label {
-    display: block; font-size: 13px; font-weight: 600; color: #4B4458;
-    margin-bottom: 7px;
+    display: block; font-size: 12px; font-weight: 600; color: #4B4458;
+    margin-bottom: 8px; padding-left: 4px;
   }
   .field .ctrl {
     position: relative;
     background: #fff;
     border: 1.5px solid #E8E5EE;
-    border-radius: 12px;
-    transition: border-color .18s ease, box-shadow .18s ease;
+    border-radius: 999px; /* ARREDONDADO total (pílula) */
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
   }
   .field .ctrl:hover { border-color: #C9C3D6; }
   .field .ctrl:focus-within {
     border-color: #7B5FC7;
-    box-shadow: 0 0 0 4px rgba(123,95,199,.12);
+    box-shadow:
+      0 0 0 5px rgba(123,95,199,.12),
+      0 8px 24px -8px rgba(83,60,157,.25);
   }
   .field input {
-    width: 100%; height: 52px; padding: 0 16px 0 46px;
+    width: 100%; height: 54px; padding: 0 22px 0 52px;
     border: none; background: transparent; outline: none;
     font-size: 14.5px; color: #1F1A33; font-family: inherit; font-weight: 500;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.01em; border-radius: 999px;
   }
   .field input::placeholder { color: #B7B3C5; font-weight: 400; }
   .field .icon {
-    position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+    position: absolute; left: 20px; top: 50%; transform: translateY(-50%);
     color: #A19BB5; width: 18px; height: 18px;
-    transition: color .18s ease;
+    transition: color .2s ease, transform .2s ease;
     stroke-width: 2;
   }
-  .field .ctrl:focus-within .icon { color: #533C9D; }
+  .field .ctrl:focus-within .icon { color: #533C9D; transform: translateY(-50%) scale(1.06); }
   .field .toggle {
-    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
     background: none; border: none; color: #A19BB5; cursor: pointer;
-    padding: 8px; border-radius: 8px;
+    padding: 8px; border-radius: 999px;
     transition: background .18s ease, color .18s ease;
   }
-  .field .toggle:hover { background: rgba(123,95,199,.08); color: #533C9D; }
+  .field .toggle:hover { background: rgba(123,95,199,.1); color: #533C9D; }
 
   .options-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 20px; font-size: 13px; }
   .checkbox { display: flex; align-items: center; gap: 8px; color: var(--ink-600); cursor: pointer; user-select: none; }
   .checkbox input { width: 16px; height: 16px; accent-color: var(--brand-700); }
 
   .submit-btn {
-    width: 100%; height: 50px; border: none; border-radius: 12px;
+    width: 100%; height: 54px; border: none; border-radius: 999px;
     background: linear-gradient(135deg, #533C9D 0%, #7D5FC7 100%);
     color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
-    box-shadow: 0 10px 24px -8px rgba(83,60,157,.5);
+    box-shadow: 0 12px 28px -10px rgba(83,60,157,.55), 0 1px 0 rgba(255,255,255,.15) inset;
     position: relative; overflow: hidden;
     transition: transform var(--t-fast), box-shadow var(--t-fast), filter var(--t-fast);
+    letter-spacing: 0.01em;
   }
   .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 32px -10px rgba(83,60,157,.6); }
   .submit-btn:active { transform: translateY(0); }
