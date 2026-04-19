@@ -28,9 +28,20 @@
                 radial-gradient(circle at 50% 80%, #43318A 0%, transparent 50%),
                 linear-gradient(135deg, #2E2165 0%, #533C9D 50%, #7D5FC7 100%);
     padding: 48px;
-    display: flex; flex-direction: column; justify-content: space-between;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
     isolation: isolate;
   }
+  .side-center { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; flex: 1; }
+  .big-logo {
+    height: clamp(180px, 28vh, 320px);
+    filter: brightness(0) invert(1) drop-shadow(0 12px 40px rgba(0,0,0,.25));
+    animation: logoBreath 6s ease-in-out infinite;
+  }
+  @keyframes logoBreath {
+    0%, 100% { transform: scale(1); opacity: .98; }
+    50% { transform: scale(1.025); opacity: 1; }
+  }
+  .side-foot { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; color: rgba(255,255,255,.5); font-size: 11px; z-index: 2; padding: 0 24px; }
   /* Floating bubbles SVG layer */
   .bubbles-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
   .bubbles-svg circle { transform-origin: center; animation: bubbleFloat var(--bf-d, 12s) ease-in-out infinite alternate; }
@@ -103,43 +114,44 @@
   .form-head h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.028em; color: var(--ink-900); margin-top: 6px; }
   .form-head p { color: var(--ink-500); font-size: 14px; margin-top: 6px; }
 
-  .field { margin-bottom: 18px; position: relative; }
+  .field { margin-bottom: 16px; position: relative; }
   .field label {
-    display: block; font-size: 12px; font-weight: 600; color: var(--ink-700);
-    letter-spacing: 0.02em; margin-bottom: 8px;
+    display: block; font-size: 13px; font-weight: 600; color: #4B4458;
+    margin-bottom: 7px;
   }
   .field .ctrl {
     position: relative;
-    background: #FAFAFC; border: 1.5px solid #E5E3EC; border-radius: 14px;
-    transition: border-color .2s ease, box-shadow .2s ease, background .2s ease, transform .2s ease;
-  }
-  .field .ctrl:hover { background: #fff; border-color: #D1CCDD; }
-  .field .ctrl:focus-within {
     background: #fff;
-    border-color: var(--brand-500, #7B5FC7);
-    box-shadow: 0 0 0 4px rgba(123,95,199,.14), 0 6px 18px -8px rgba(83,60,157,.25);
-    transform: translateY(-1px);
+    border: 1.5px solid #E8E5EE;
+    border-radius: 12px;
+    transition: border-color .18s ease, box-shadow .18s ease;
+  }
+  .field .ctrl:hover { border-color: #C9C3D6; }
+  .field .ctrl:focus-within {
+    border-color: #7B5FC7;
+    box-shadow: 0 0 0 4px rgba(123,95,199,.12);
   }
   .field input {
-    width: 100%; height: 56px; padding: 0 18px 0 50px;
+    width: 100%; height: 52px; padding: 0 16px 0 46px;
     border: none; background: transparent; outline: none;
-    font-size: 15px; color: var(--ink-900); font-family: inherit;
-    font-weight: 500;
+    font-size: 14.5px; color: #1F1A33; font-family: inherit; font-weight: 500;
+    letter-spacing: 0.01em;
   }
   .field input::placeholder { color: #B7B3C5; font-weight: 400; }
   .field .icon {
-    position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
-    color: #9B95B0; width: 20px; height: 20px;
-    transition: color .2s ease;
+    position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+    color: #A19BB5; width: 18px; height: 18px;
+    transition: color .18s ease;
+    stroke-width: 2;
   }
-  .field .ctrl:focus-within .icon { color: var(--brand-700, #533C9D); }
+  .field .ctrl:focus-within .icon { color: #533C9D; }
   .field .toggle {
-    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    background: none; border: none; color: #9B95B0; cursor: pointer;
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: #A19BB5; cursor: pointer;
     padding: 8px; border-radius: 8px;
-    transition: background .2s ease, color .2s ease;
+    transition: background .18s ease, color .18s ease;
   }
-  .field .toggle:hover { background: rgba(123,95,199,.1); color: var(--brand-700, #533C9D); }
+  .field .toggle:hover { background: rgba(123,95,199,.08); color: #533C9D; }
 
   .options-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 20px; font-size: 13px; }
   .checkbox { display: flex; align-items: center; gap: 8px; color: var(--ink-600); cursor: pointer; user-select: none; }
@@ -211,21 +223,8 @@
     <!-- Floating bubbles SVG (portado de 21st-dev/floating-bubbles) -->
     <svg class="bubbles-svg" preserveAspectRatio="none" aria-hidden="true"></svg>
 
-    <div class="side-brand anim-in">
-      <img src="/logo.svg" alt="Lavandery"/>
-      <span class="side-brand-text">· Painel de Gestão</span>
-    </div>
-
-    <div class="side-hero">
-      <div class="side-kicker anim-in anim-in-1">LAVANDERIAS COMPARTILHADAS</div>
-      <h2 class="side-title anim-in anim-in-2">Sua operação<br/>em um só lugar.</h2>
-      <p class="side-sub anim-in anim-in-3">Contratos, implantações, visitas técnicas, insumos, chamados e relatórios — tudo integrado em tempo real.</p>
-
-      <div class="side-stats anim-in anim-in-4">
-        <div class="stat-mini"><div class="v">126</div><div class="l">condomínios</div></div>
-        <div class="stat-mini"><div class="v">326</div><div class="l">visitas / ano</div></div>
-        <div class="stat-mini"><div class="v">60<span style="font-size:14px">d</span></div><div class="l">SLA implantação</div></div>
-      </div>
+    <div class="side-center anim-in anim-in-1">
+      <img src="/logo.svg" alt="Lavandery" class="big-logo"/>
     </div>
 
     <div class="side-foot">© Lavandery · INOVA TECNOLOGIA E SERVIÇOS E REPRESENTAÇÃO LTDA.</div>
