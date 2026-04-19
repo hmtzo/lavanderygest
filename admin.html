@@ -1810,9 +1810,8 @@ async function initGlobe() {
   });
   setTimeout(() => { canvas.style.opacity = '1'; }, 50);
 }
-// Init quando dashboard estiver visível
-const _origShowTabForGlobe = window.showTab;
-document.addEventListener('DOMContentLoaded', () => { setTimeout(initGlobe, 800); });
+// Init imediato (script roda já com DOM pronto)
+setTimeout(initGlobe, 600);
 
 // ---------- Tabs ----------
 const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos' };
