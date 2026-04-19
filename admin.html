@@ -166,7 +166,8 @@
 
 <main class="page enter" id="dashMain">
   <section class="hero-banner">
-    <div style="position:relative;z-index:1">
+    <svg class="hero-bubbles" preserveAspectRatio="none" viewBox="0 0 1200 300" aria-hidden="true"></svg>
+    <div style="position:relative;z-index:2">
       <div id="heroGreeting" style="font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.8);margin-bottom:6px">Bem-vindo</div>
       <h1 style="font-size:32px;margin-bottom:4px" id="heroName">Painel Lavandery</h1>
       <p id="dashSubtitle">Carregando a operação...</p>
@@ -1783,6 +1784,27 @@ async function openScheduleModal(existing) {
     const heroName = document.querySelector('#heroName');
     if (heroGreet) heroGreet.textContent = `${greeting} · ${emoji}`;
     if (heroName) heroName.textContent = `Bem-vindo, ${firstName}`;
+    // Bolhas dentro do hero banner
+    (function() {
+      const svg = document.querySelector('.hero-bubbles');
+      if (!svg || svg._filled) return; svg._filled = true;
+      const palette = ['rgba(255,255,255,', 'rgba(196,168,242,', 'rgba(214,196,250,', 'rgba(168,134,235,'];
+      for (let i = 0; i < 22; i++) {
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        const op = 0.15 + Math.random() * 0.30;
+        const col = palette[Math.floor(Math.random() * palette.length)] + op + ')';
+        c.setAttribute('cx', Math.random() * 1200);
+        c.setAttribute('cy', Math.random() * 300);
+        c.setAttribute('r', 4 + Math.random() * 22);
+        c.setAttribute('fill', col);
+        c.style.setProperty('--hb-d', (8 + Math.random() * 12) + 's');
+        c.style.setProperty('--hb-x', (Math.random() * 60 - 30) + 'px');
+        c.style.setProperty('--hb-y', (Math.random() * 40 - 20) + 'px');
+        c.style.setProperty('--hb-op', op);
+        c.style.animationDelay = (-Math.random() * 10) + 's';
+        svg.appendChild(c);
+      }
+    })();
     // Só carrega o dashboard depois de autenticado
     load();
   } catch(e) { location.href = '/login.html'; }
