@@ -60,9 +60,10 @@
     pointer-events: none;
   }
 
-  .side-brand { position: relative; z-index: 2; display: flex; align-items: center; gap: 12px; }
-  .side-brand img { height: 30px; filter: brightness(0) invert(1); }
-  .side-brand-text { color: #fff; opacity: .9; font-size: 13px; font-weight: 500; letter-spacing: 0.02em; }
+  .side-brand { position: relative; z-index: 2; display: flex; align-items: center; gap: 14px; }
+  .side-brand img { height: 56px; filter: brightness(0) invert(1); transition: transform .3s ease; }
+  .side-brand img:hover { transform: scale(1.04); }
+  .side-brand-text { color: #fff; opacity: .85; font-size: 14px; font-weight: 500; letter-spacing: 0.02em; padding-top: 6px; }
 
   .side-hero { position: relative; z-index: 2; max-width: 520px; }
   .side-kicker { color: rgba(255,255,255,.75); font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; }
@@ -102,35 +103,43 @@
   .form-head h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.028em; color: var(--ink-900); margin-top: 6px; }
   .form-head p { color: var(--ink-500); font-size: 14px; margin-top: 6px; }
 
-  .field { margin-bottom: 14px; position: relative; }
+  .field { margin-bottom: 18px; position: relative; }
   .field label {
-    display: block; font-size: 11px; font-weight: 600; color: var(--ink-500);
-    letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 6px;
+    display: block; font-size: 12px; font-weight: 600; color: var(--ink-700);
+    letter-spacing: 0.02em; margin-bottom: 8px;
   }
   .field .ctrl {
     position: relative;
-    background: #fff; border: 1px solid var(--ink-200); border-radius: 12px;
-    transition: all var(--t-fast);
+    background: #FAFAFC; border: 1.5px solid #E5E3EC; border-radius: 14px;
+    transition: border-color .2s ease, box-shadow .2s ease, background .2s ease, transform .2s ease;
   }
+  .field .ctrl:hover { background: #fff; border-color: #D1CCDD; }
   .field .ctrl:focus-within {
-    border-color: var(--brand-500);
-    box-shadow: 0 0 0 4px rgba(101,74,186,.1), 0 4px 14px -4px rgba(83,60,157,.15);
+    background: #fff;
+    border-color: var(--brand-500, #7B5FC7);
+    box-shadow: 0 0 0 4px rgba(123,95,199,.14), 0 6px 18px -8px rgba(83,60,157,.25);
+    transform: translateY(-1px);
   }
   .field input {
-    width: 100%; height: 48px; padding: 0 16px 0 44px;
+    width: 100%; height: 56px; padding: 0 18px 0 50px;
     border: none; background: transparent; outline: none;
-    font-size: 14px; color: var(--ink-900); font-family: inherit;
+    font-size: 15px; color: var(--ink-900); font-family: inherit;
+    font-weight: 500;
   }
+  .field input::placeholder { color: #B7B3C5; font-weight: 400; }
   .field .icon {
-    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-    color: var(--ink-400); width: 18px; height: 18px;
+    position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
+    color: #9B95B0; width: 20px; height: 20px;
+    transition: color .2s ease;
   }
+  .field .ctrl:focus-within .icon { color: var(--brand-700, #533C9D); }
   .field .toggle {
-    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-    background: none; border: none; color: var(--ink-400); cursor: pointer;
-    padding: 6px; border-radius: 6px;
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: #9B95B0; cursor: pointer;
+    padding: 8px; border-radius: 8px;
+    transition: background .2s ease, color .2s ease;
   }
-  .field .toggle:hover { background: var(--ink-100); color: var(--ink-700); }
+  .field .toggle:hover { background: rgba(123,95,199,.1); color: var(--brand-700, #533C9D); }
 
   .options-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 20px; font-size: 13px; }
   .checkbox { display: flex; align-items: center; gap: 8px; color: var(--ink-600); cursor: pointer; user-select: none; }
