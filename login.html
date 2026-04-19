@@ -166,11 +166,13 @@
       0 0 0 5px rgba(123,95,199,.12),
       0 8px 24px -8px rgba(83,60,157,.25);
   }
+  .field .ctrl, .field input { box-sizing: border-box; }
   .field input {
-    width: 100%; height: 54px; padding: 0 22px 0 52px;
+    width: 100%; height: 54px; padding: 0 50px 0 52px;
     border: none; background: transparent; outline: none;
     font-size: 14.5px; color: #1F1A33; font-family: inherit; font-weight: 500;
     letter-spacing: 0.01em; border-radius: 999px;
+    display: block;
   }
   .field input::placeholder { color: #B7B3C5; font-weight: 400; }
   .field .icon {
