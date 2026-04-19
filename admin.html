@@ -103,6 +103,38 @@
   <div>
     <header class="topbar-new">
       <div class="breadcrumb"><b id="crumbTitle">Dashboard</b></div>
+      <!-- Dropdown nav (acesso rápido agrupado) -->
+      <nav class="dn-nav" aria-label="Acesso rápido">
+        <ul class="dn-list">
+          <li class="dn-item" data-menu="ops">
+            <button class="dn-trigger">Operações <svg class="dn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="dn-panel">
+              <h4>Atendimento</h4>
+              <a data-tab="schedule"><span class="dn-ico">📅</span><div><b>Manutenções</b><small>Agenda preventiva</small></div></a>
+              <a data-tab="map"><span class="dn-ico">🗺️</span><div><b>Mapa & Rota</b><small>Otimização de visitas</small></div></a>
+              <a data-tab="supplies"><span class="dn-ico">🧴</span><div><b>Insumos</b><small>Sabão, amaciante</small></div></a>
+            </div>
+          </li>
+          <li class="dn-item" data-menu="gestao">
+            <button class="dn-trigger">Gestão <svg class="dn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="dn-panel">
+              <h4>Cadastro</h4>
+              <a data-tab="condos"><span class="dn-ico">🏢</span><div><b>Condomínios</b><small>Lista e detalhes</small></div></a>
+              <a data-tab="implantations"><span class="dn-ico">🏗️</span><div><b>Implantações</b><small>Setup de novos clientes</small></div></a>
+              <a data-tab="deliveries"><span class="dn-ico">📦</span><div><b>Entregas</b><small>Equipamentos</small></div></a>
+            </div>
+          </li>
+          <li class="dn-item" data-menu="dados">
+            <button class="dn-trigger">Dados <svg class="dn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="dn-panel">
+              <h4>Análise</h4>
+              <a data-tab="tickets"><span class="dn-ico">🎫</span><div><b>Chamados</b><small>Suporte e SLA</small></div></a>
+              <a data-tab="history"><span class="dn-ico">📊</span><div><b>Histórico</b><small>Consumo</small></div></a>
+              <a data-tab="import"><span class="dn-ico">📥</span><div><b>Autentique</b><small>Importar contratos</small></div></a>
+            </div>
+          </li>
+        </ul>
+      </nav>
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input id="globalSearch" placeholder="Busca rápida: condomínios, chamados, visitas..."/>
@@ -1715,6 +1747,8 @@ document.querySelector('#logoutBtn')?.addEventListener('click', async () => {
 document.addEventListener('click', (e) => {
   const li = e.target.closest('.gm-item[data-tab]');
   if (li) showTab(li.dataset.tab);
+  const dn = e.target.closest('.dn-panel a[data-tab]');
+  if (dn) { showTab(dn.dataset.tab); dn.closest('.dn-item')?.blur(); }
 });
 
 // ---------- Globo 3D (cobe) ----------
