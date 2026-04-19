@@ -101,6 +101,19 @@ app.post('/api/auth/login', (req,res) => {
 
 // ----- Reference data -----
 app.get('/api/technicians', (_,res) => res.json(db.prepare('SELECT id,name,email FROM technicians').all()));
+app.post('/api/technicians', (req,res) => {
+  const { id, name, email, pin } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'missing_name' });
+  const tid = id || ('t_' + Math.random().toString(36).slice(2,8));
+  db.prepare('INSERT INTO technicians (id,name,email,pin) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,email=excluded.email,pin=COALESCE(excluded.pin,technicians.pin)')
+    .run(tid, name, (email||'').toLowerCase(), pin||'0000');
+  res.json({ ok: true, id: tid });
+});
+app.delete('/api/technicians/:id', (req,res) => {
+  db.prepare('UPDATE visits_schedule SET technician_id=NULL WHERE technician_id=?').run(req.params.id);
+  db.prepare('DELETE FROM technicians WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
+});
 app.get('/api/condominiums', (_,res) => {
   const condos = db.prepare('SELECT * FROM condominiums').all();
   const machines = db.prepare('SELECT * FROM machines').all();
