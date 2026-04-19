@@ -129,7 +129,8 @@ export function authRoutes(app, db) {
       const norm = normalizeCondoName(c.name);
       if (!norm) continue;
       const email = `condo_${norm}@lavandery.condo`;
-      const uid = 'u_c_' + norm.slice(0, 20);
+      // id único baseado no condo_id (sem colisão)
+      const uid = 'u_c_' + c.id.replace(/[^a-z0-9]/gi, '').slice(0, 24);
       upsert.run(uid, email, hash, c.name, c.id);
       created++;
     }
