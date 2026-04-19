@@ -10,7 +10,8 @@
     css.textContent = `
       .global-bubbles {
         position: fixed; inset: 0; width: 100vw; height: 100vh;
-        pointer-events: none; z-index: 0; overflow: hidden;
+        pointer-events: none; z-index: 9999; overflow: hidden;
+        mix-blend-mode: multiply;
       }
       .global-bubbles svg { width: 100%; height: 100%; display: block; }
       .global-bubbles circle {
@@ -22,8 +23,6 @@
         50%  { opacity: calc(var(--gb-op, .35) * .55); transform: translate(var(--gb-x, 30px), var(--gb-y, -25px)) scale(1.12); }
         100% { opacity: var(--gb-op, .35); transform: translate(calc(var(--gb-x, 30px) * -.5), calc(var(--gb-y, -25px) * .8)) scale(0.96); }
       }
-      /* garante que o conteúdo principal fica acima */
-      body > *:not(.global-bubbles) { position: relative; z-index: 1; }
     `;
     document.head.appendChild(css);
   }
@@ -48,7 +47,7 @@
     const x = Math.random() * 1600;
     const y = Math.random() * 1000;
     const r = 6 + Math.random() * 28;
-    const op = 0.10 + Math.random() * 0.18; // bem suave pra não atrapalhar
+    const op = 0.18 + Math.random() * 0.22; // mix-blend-mode multiply precisa mais opacidade
     const col = palette[Math.floor(Math.random() * palette.length)] + op + ')';
     c.setAttribute('cx', x);
     c.setAttribute('cy', y);
