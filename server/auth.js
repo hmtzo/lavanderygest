@@ -193,6 +193,7 @@ export const PUBLIC_PATHS = [
   /^\/design\.css$/,
   /^\/logo\.svg$/,
   /^\/app\.js$/,
+  /^\/bubbles\.js$/,
   /^\/favicon/,
   /^\/health$/,
   /^\/api\/auth\//,

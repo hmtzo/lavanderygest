@@ -16,6 +16,7 @@ ENV NODE_ENV=production
 COPY --from=deps /app/server/node_modules /app/server/node_modules
 COPY server /app/server
 COPY app.js /app/app.js
+COPY bubbles.js /app/bubbles.js
 COPY admin.html /app/admin.html
 COPY chamado.html /app/chamado.html
 COPY implantacao.html /app/implantacao.html
