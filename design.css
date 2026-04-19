@@ -630,3 +630,13 @@ h3 { font-size: 16px; line-height: 1.4; }
   white-space: nowrap;
 }
 .leaflet-tooltip.condoLabel::before { display: none; }
+
+/* Toast stack (estilo shugar) */
+.toastStack {
+  position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+  display: flex; flex-direction: column-reverse; align-items: flex-end;
+  gap: 0; pointer-events: none;
+  max-width: 380px;
+}
+.toastStack > .toast-card { margin-top: 8px; }
+.toastStack > .toast-card:first-child { margin-top: 0; }

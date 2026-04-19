@@ -2034,6 +2034,10 @@ app.post('/api/alerts/:id/ack', (req,res) => {
   db.prepare('UPDATE alerts_fired SET ack_at=? WHERE id=?').run(Date.now(), req.params.id);
   res.json({ ok:true });
 });
+app.post('/api/alerts/ack-all', (_req, res) => {
+  const r = db.prepare('UPDATE alerts_fired SET ack_at=? WHERE ack_at IS NULL').run(Date.now());
+  res.json({ ok:true, acked: r.changes });
+});
 
 // ---------- Central de Alertas ----------
 // Agrega TUDO que precisa de atenção: insumos urgentes, chamados abertos, visitas de hoje.
