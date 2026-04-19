@@ -24,6 +24,8 @@ export function setupAuth(db) {
     expires_at INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);`);
+  // Migração — adiciona condo_id em users (idempotente)
+  try { db.exec('ALTER TABLE users ADD COLUMN condo_id TEXT'); } catch {}
 
   // Seed admin inicial + migrar técnicos existentes (idempotente)
   const hasAdmin = db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin'").get().c > 0;
@@ -63,13 +65,13 @@ export function authMiddleware(db) {
     const cookies = parseCookies(req);
     const token = cookies[SESSION_COOKIE];
     if (!token) return next();
-    const s = db.prepare('SELECT s.user_id, s.expires_at, u.email, u.name, u.role, u.active FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?').get(token);
+    const s = db.prepare('SELECT s.user_id, s.expires_at, u.email, u.name, u.role, u.active, u.condo_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?').get(token);
     if (!s || !s.active) return next();
     if (s.expires_at && s.expires_at < Date.now()) {
       db.prepare('DELETE FROM sessions WHERE token=?').run(token);
       return next();
     }
-    req.user = { id: s.user_id, email: s.email, name: s.name, role: s.role };
+    req.user = { id: s.user_id, email: s.email, name: s.name, role: s.role, condo_id: s.condo_id };
     next();
   };
 }
@@ -84,7 +86,74 @@ export function requireAuth(...roles) {
   };
 }
 
+// Login por nome do condomínio (normaliza: lower, sem acento, só alfanumérico)
+function normalizeCondoName(s) {
+  return String(s||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g,'');
+}
+
 export function authRoutes(app, db) {
+  // Login condo (por nome)
+  app.post('/api/condo-auth/login', async (req, res) => {
+    const { condo_name, password } = req.body || {};
+    if (!condo_name || !password) return res.status(400).json({ error: 'missing_credentials' });
+    const norm = normalizeCondoName(condo_name);
+    // Busca user do condo: email é "condo_<norm>@lavandery.condo"
+    const user = db.prepare(`SELECT * FROM users WHERE role='condo' AND email=? AND active=1`).get(`condo_${norm}@lavandery.condo`);
+    if (!user) return res.status(401).json({ error: 'invalid' });
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'invalid' });
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = Date.now() + SESSION_DAYS * 86400_000;
+    db.prepare('INSERT INTO sessions (token,user_id,ip,user_agent,expires_at) VALUES (?,?,?,?,?)').run(token, user.id, req.ip, req.headers['user-agent']||'', expires);
+    db.prepare('UPDATE users SET last_login_at=? WHERE id=?').run(Date.now(), user.id);
+    const isProd = process.env.NODE_ENV === 'production';
+    res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS*86400}${isProd?'; Secure':''}`);
+    res.json({ ok: true, user: { id: user.id, name: user.name, role: user.role, condo_id: user.condo_id } });
+  });
+
+  // Admin: gera usuários condo pra todos os condomínios
+  app.post('/api/condo-users/generate-all', async (req, res) => {
+    if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+    const defaultPass = (req.body && req.body.password) || 'Mudar123@@2026';
+    const hash = await bcrypt.hash(defaultPass, 10);
+    const condos = db.prepare('SELECT id, name FROM condominiums').all();
+    const upsert = db.prepare(`
+      INSERT INTO users (id, email, password_hash, name, role, condo_id)
+      VALUES (?,?,?,?, 'condo', ?)
+      ON CONFLICT(email) DO UPDATE SET name=excluded.name, condo_id=excluded.condo_id, role='condo', password_hash=excluded.password_hash
+    `);
+    let created = 0;
+    for (const c of condos) {
+      const norm = normalizeCondoName(c.name);
+      if (!norm) continue;
+      const email = `condo_${norm}@lavandery.condo`;
+      const uid = 'u_c_' + norm.slice(0, 20);
+      upsert.run(uid, email, hash, c.name, c.id);
+      created++;
+    }
+    res.json({ ok: true, created, password: defaultPass });
+  });
+
+  // Lista usuários condo (admin)
+  app.get('/api/condo-users', (req, res) => {
+    if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+    const rows = db.prepare(`SELECT u.id, u.name, u.condo_id, u.last_login_at, c.name AS condo_name
+      FROM users u LEFT JOIN condominiums c ON c.id=u.condo_id
+      WHERE u.role='condo' AND u.active=1 ORDER BY u.name`).all();
+    res.json(rows.map(r => ({ ...r, login_name: r.condo_name || r.name })));
+  });
+
+  // Reset senha condo (admin)
+  app.post('/api/condo-users/:id/reset-password', async (req, res) => {
+    if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+    const pass = (req.body && req.body.password) || 'Mudar123@@2026';
+    const hash = await bcrypt.hash(pass, 10);
+    db.prepare('UPDATE users SET password_hash=? WHERE id=? AND role=?').run(hash, req.params.id, 'condo');
+    res.json({ ok:true, password: pass });
+  });
+
   app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'missing_credentials' });
@@ -197,6 +266,9 @@ export const PUBLIC_PATHS = [
   /^\/favicon/,
   /^\/health$/,
   /^\/api\/auth\//,
+  /^\/api\/condo-auth\//,
+  /^\/condo-login\.html$/,
+  /^\/condo\.html$/,
   /^\/api\/public\//,
   /^\/api\/webhooks\/incoming\//,
   /^\/api\/public\/calendar\.ics/,

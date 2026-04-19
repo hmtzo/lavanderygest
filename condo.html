@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="theme-color" content="#533C9D"/>
+<title>Portal · Lavandery</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design.css"/>
+<style>
+  body { font-family: 'Inter', system-ui; margin: 0; min-height: 100vh; }
+  .topbar { background: rgba(255,255,255,.7); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(0,0,0,.06); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 50; }
+  .topbar .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; color: #1F1A33; }
+  .topbar img { height: 28px; }
+  .topbar .user { display: flex; align-items: center; gap: 12px; font-size: 13px; color: #4B4458; }
+  .topbar .user button { background: none; border: 1px solid #E8E5EE; border-radius: 999px; padding: 6px 14px; font-size: 12px; cursor: pointer; color: #4B4458; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; display: grid; gap: 20px; position: relative; z-index: 1; }
+  .hero { background: linear-gradient(135deg, #533C9D, #7D5FC7); color: #fff; border-radius: 20px; padding: 24px 28px; }
+  .hero h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -.02em; }
+  .hero p { margin: 0; opacity: .85; font-size: 14px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .card { background: rgba(255,255,255,.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.9); border-radius: 16px; padding: 20px; }
+  .card h3 { margin: 0 0 8px; font-size: 15px; color: #1F1A33; }
+  .card .desc { font-size: 13px; color: #6B6581; margin: 0 0 14px; }
+  .card .action { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #533C9D; cursor: pointer; text-decoration: none; }
+  .tabs { display: flex; gap: 4px; background: rgba(255,255,255,.5); padding: 4px; border-radius: 12px; border: 1px solid rgba(0,0,0,.04); width: fit-content; margin-bottom: 4px; }
+  .tabs button { background: transparent; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; color: #6B6581; font-family: inherit; }
+  .tabs button.active { background: #fff; color: #1F1A33; box-shadow: 0 2px 6px rgba(0,0,0,.05); }
+  .panel { background: rgba(255,255,255,.85); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.9); border-radius: 18px; padding: 22px; }
+  .panel h2 { margin: 0 0 12px; font-size: 17px; color: #1F1A33; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #4B4458; margin: 10px 0 4px; }
+  input, textarea, select { width: 100%; box-sizing: border-box; padding: 10px 14px; border: 1.5px solid #E8E5EE; border-radius: 10px; font-family: inherit; font-size: 14px; outline: none; background: #fff; color: #1F1A33; }
+  input:focus, textarea:focus, select:focus { border-color: #7B5FC7; box-shadow: 0 0 0 4px rgba(123,95,199,.12); }
+  textarea { min-height: 80px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { background: linear-gradient(135deg, #533C9D, #7D5FC7); color: #fff; border: none; padding: 12px 20px; border-radius: 999px; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 14px; box-shadow: 0 8px 20px -8px rgba(83,60,157,.4); }
+  .btn.ghost { background: transparent; color: #533C9D; border: 1.5px solid #E8E5EE; box-shadow: none; }
+  .list { display: grid; gap: 10px; margin-top: 16px; }
+  .item { background: rgba(255,255,255,.6); border: 1px solid rgba(0,0,0,.05); border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; font-size: 13px; }
+  .item b { color: #1F1A33; display: block; font-size: 14px; margin-bottom: 2px; }
+  .item small { color: #8B85A1; }
+  .pill { font-size: 11px; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+  .pill.pendente, .pill.aberto { background: #fef3c7; color: #92400e; }
+  .pill.aprovado, .pill.em_andamento { background: #dbeafe; color: #1e40af; }
+  .pill.entregue, .pill.resolvido, .pill.fechado { background: #d1fae5; color: #065f46; }
+  .pill.cancelado { background: #fee2e2; color: #991b1b; }
+  .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; margin-top: 10px; }
+  .photo-thumb { aspect-ratio: 1/1; object-fit: cover; border-radius: 8px; }
+  .empty { text-align: center; padding: 36px 20px; color: #A19BB5; font-size: 13px; }
+  .item-row { display: grid; grid-template-columns: 1fr 90px 100px auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .item-row button { background: none; border: none; color: #ef4444; font-size: 18px; cursor: pointer; padding: 4px 8px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><img src="/logo.svg" alt="Lavandery"/><span>Portal</span></div>
+  <div class="user">
+    <span id="condoName">—</span>
+    <button id="logoutBtn">Sair</button>
+  </div>
+</header>
+
+<main class="container">
+  <section class="hero">
+    <h1 id="heroTitle">Olá!</h1>
+    <p id="heroSub">Bem-vindo ao portal do seu condomínio.</p>
+  </section>
+
+  <div class="tabs">
+    <button data-tab="supplies" class="active">Insumos</button>
+    <button data-tab="tickets">Chamados</button>
+    <button data-tab="payments">Pagamentos</button>
+  </div>
+
+  <!-- PEDIR INSUMOS -->
+  <section class="panel" id="panel-supplies">
+    <h2>Pedir insumos</h2>
+    <div id="supplyItems"></div>
+    <button class="btn ghost" type="button" id="addItemBtn" style="margin-right:10px">+ Adicionar item</button>
+    <label>Observações</label>
+    <textarea id="supplyNote" placeholder="Ex: entregar em horário comercial, portaria..."></textarea>
+    <button class="btn" id="submitSupply">Enviar pedido</button>
+    <div class="list" id="supplyList"></div>
+  </section>
+
+  <!-- CHAMADOS -->
+  <section class="panel" id="panel-tickets" style="display:none">
+    <h2>Abrir chamado</h2>
+    <label>Título</label>
+    <input id="tktTitle" placeholder="Ex: Lavadora 01 com vazamento"/>
+    <div class="row">
+      <div><label>Categoria</label><select id="tktCategory"><option value="maquina">Máquina</option><option value="infraestrutura">Infraestrutura</option><option value="insumos">Insumos</option><option value="outro">Outro</option></select></div>
+      <div><label>Prioridade</label><select id="tktPriority"><option value="baixa">Baixa</option><option value="media" selected>Média</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></div>
+    </div>
+    <label>Descrição</label>
+    <textarea id="tktDesc" placeholder="Descreva o problema em detalhes..."></textarea>
+    <label>Fotos (até 8)</label>
+    <input type="file" id="tktPhotos" accept="image/*" multiple/>
+    <div class="photos" id="tktPreview"></div>
+    <button class="btn" id="submitTicket">Abrir chamado</button>
+    <div class="list" id="ticketList"></div>
+  </section>
+
+  <!-- PAGAMENTOS -->
+  <section class="panel" id="panel-payments" style="display:none">
+    <h2>Relatórios e Comprovantes</h2>
+    <div class="list" id="paymentList"></div>
+  </section>
+</main>
+
+<script src="/bubbles.js" defer></script>
+<script>
+const $ = s => document.querySelector(s);
+const fmt = n => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n||0);
+const fmtDate = t => new Date(t).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const esc = s => String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Guard
+(async () => {
+  try {
+    const r = await fetch('/api/condo/me');
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    $('#condoName').textContent = d.condo?.name || d.user?.name || '—';
+    $('#heroTitle').textContent = 'Olá, ' + (d.condo?.name || 'Condomínio') + '!';
+    $('#heroSub').textContent = `${d.condo?.washers||0} lavadoras · ${d.condo?.dryers||0} secadoras · ${d.condo?.maintenance_label||'Manutenção periódica'}`;
+    loadSupplies(); loadTickets(); loadPayments();
+  } catch { location.href = '/condo-login.html'; }
+})();
+
+$('#logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.href = '/condo-login.html';
+});
+
+// Tabs
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+  ['supplies','tickets','payments'].forEach(t => $('#panel-'+t).style.display = b.dataset.tab === t ? 'block' : 'none');
+}));
+
+// ---------- Supplies ----------
+const SUPPLY_TYPES = [
+  { value:'sabao', label:'Sabão' },
+  { value:'amaciante', label:'Amaciante' },
+  { value:'desinfetante', label:'Desinfetante' },
+  { value:'outro', label:'Outro' },
+];
+function addSupplyRow(type='sabao', qty=1, unit='L') {
+  const host = $('#supplyItems');
+  const row = document.createElement('div');
+  row.className = 'item-row';
+  row.innerHTML = `
+    <select class="srType">${SUPPLY_TYPES.map(t=>`<option value="${t.value}" ${t.value===type?'selected':''}>${t.label}</option>`).join('')}</select>
+    <input type="number" class="srQty" value="${qty}" min="1" step="1" placeholder="Qtd"/>
+    <select class="srUnit"><option ${unit==='L'?'selected':''}>L</option><option ${unit==='un'?'selected':''}>un</option><option ${unit==='kg'?'selected':''}>kg</option></select>
+    <button type="button" aria-label="Remover">×</button>
+  `;
+  row.querySelector('button').addEventListener('click', () => row.remove());
+  host.appendChild(row);
+}
+addSupplyRow();
+$('#addItemBtn').addEventListener('click', () => addSupplyRow());
+
+async function loadSupplies() {
+  try {
+    const list = await fetch('/api/condo/supply-requests').then(r => r.json());
+    $('#supplyList').innerHTML = list.length ? list.map(s => `
+      <div class="item">
+        <div>
+          <b>${s.items.map(i => `${i.qty}${i.unit||''} ${SUPPLY_TYPES.find(t=>t.value===i.type)?.label || i.type}`).join(' · ')}</b>
+          <small>${fmtDate(s.created_at)}</small>
+          ${s.note ? `<div style="margin-top:4px;color:#4B4458">${esc(s.note)}</div>` : ''}
+        </div>
+        <span class="pill ${s.status}">${s.status}</span>
+      </div>
+    `).join('') : '<div class="empty">Nenhum pedido ainda. Faça seu primeiro acima.</div>';
+  } catch {}
+}
+$('#submitSupply').addEventListener('click', async () => {
+  const items = Array.from(document.querySelectorAll('#supplyItems .item-row')).map(r => ({
+    type: r.querySelector('.srType').value,
+    qty: parseInt(r.querySelector('.srQty').value,10) || 1,
+    unit: r.querySelector('.srUnit').value,
+  }));
+  if (!items.length) return alert('Adicione ao menos um item');
+  const note = $('#supplyNote').value;
+  const r = await fetch('/api/condo/supply-requests', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ items, note }) });
+  if (r.ok) { $('#supplyNote').value=''; $('#supplyItems').innerHTML=''; addSupplyRow(); loadSupplies(); alert('Pedido enviado ✓'); }
+  else alert('Erro ao enviar');
+});
+
+// ---------- Tickets ----------
+let ticketPhotos = [];
+$('#tktPhotos').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files).slice(0, 8);
+  ticketPhotos = [];
+  for (const f of files) {
+    const b64 = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(f); });
+    ticketPhotos.push(b64);
+  }
+  $('#tktPreview').innerHTML = ticketPhotos.map(p => `<img src="${p}" class="photo-thumb"/>`).join('');
+});
+$('#submitTicket').addEventListener('click', async () => {
+  const title = $('#tktTitle').value.trim();
+  if (!title) return alert('Informe o título');
+  const body = {
+    title, description: $('#tktDesc').value,
+    category: $('#tktCategory').value, priority: $('#tktPriority').value,
+    photos: ticketPhotos,
+  };
+  const r = await fetch('/api/condo/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (r.ok) { $('#tktTitle').value=''; $('#tktDesc').value=''; $('#tktPhotos').value=''; $('#tktPreview').innerHTML=''; ticketPhotos=[]; loadTickets(); alert('Chamado aberto ✓'); }
+  else alert('Erro ao abrir chamado');
+});
+async function loadTickets() {
+  try {
+    const list = await fetch('/api/condo/tickets').then(r => r.json());
+    $('#ticketList').innerHTML = list.length ? list.map(t => `
+      <div class="item">
+        <div>
+          <b>${esc(t.title)}</b>
+          <small>${fmtDate(t.created_at)} · ${esc(t.category)} · ${esc(t.priority)}</small>
+          ${t.description ? `<div style="margin-top:6px;color:#4B4458;font-size:13px">${esc(t.description)}</div>` : ''}
+          ${t.photos?.length ? `<div class="photos">${t.photos.map(p=>`<img src="${p}" class="photo-thumb"/>`).join('')}</div>` : ''}
+        </div>
+        <span class="pill ${t.status}">${t.status.replace('_',' ')}</span>
+      </div>
+    `).join('') : '<div class="empty">Nenhum chamado ainda.</div>';
+  } catch {}
+}
+
+// ---------- Payments ----------
+async function loadPayments() {
+  try {
+    const list = await fetch('/api/condo/payments').then(r => r.json());
+    $('#paymentList').innerHTML = list.length ? list.map(p => `
+      <div class="item">
+        <div>
+          <b>${esc(p.period || '—')} · ${p.type === 'repasse' ? 'Repasse' : 'Comprovante'}</b>
+          <small>${fmtDate(p.created_at)}${p.reference ? ' · Ref: '+esc(p.reference) : ''}</small>
+          ${p.note ? `<div style="margin-top:4px;color:#4B4458;font-size:13px">${esc(p.note)}</div>` : ''}
+          ${p.file_url ? `<a href="${esc(p.file_url)}" target="_blank" style="color:#533C9D;font-size:13px;font-weight:600;margin-top:6px;display:inline-block">📎 Ver arquivo</a>` : ''}
+        </div>
+        <b style="font-size:16px;color:#1F1A33">${fmt(p.amount)}</b>
+      </div>
+    `).join('') : '<div class="empty">Nenhum relatório disponível ainda.</div>';
+  } catch {}
+}
+</script>
+</body>
+</html>

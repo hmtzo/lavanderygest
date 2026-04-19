@@ -19,6 +19,8 @@ COPY app.js /app/app.js
 COPY bubbles.js /app/bubbles.js
 COPY admin.html /app/admin.html
 COPY chamado.html /app/chamado.html
+COPY condo-login.html /app/condo-login.html
+COPY condo.html /app/condo.html
 COPY implantacao.html /app/implantacao.html
 COPY index.html /app/index.html
 COPY login.html /app/login.html

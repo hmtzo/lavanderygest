@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="theme-color" content="#533C9D"/>
+<title>Portal do Condomínio · Lavandery</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design.css"/>
+<style>
+  body { font-family: 'Inter', system-ui; margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; background: linear-gradient(135deg, #FAF7FF 0%, #EDE5FF 100%); }
+  .card { width: min(440px, 100%); background: rgba(255,255,255,.85); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,.9); border-radius: 24px; padding: 40px 32px; box-shadow: 0 30px 60px -20px rgba(83,60,157,.18); position: relative; z-index: 1; }
+  .logo-row { display: flex; justify-content: center; margin-bottom: 12px; }
+  .logo-row img { height: 52px; }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 4px; text-align: center; background: linear-gradient(135deg, #2E2165 0%, #7B5FC7 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p.sub { text-align: center; font-size: 13px; color: #8B85A1; margin: 0 0 24px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #4B4458; margin: 14px 0 6px; padding-left: 4px; }
+  input { width: 100%; box-sizing: border-box; height: 50px; padding: 0 18px; border: 1.5px solid #E8E5EE; background: #fff; border-radius: 999px; font-size: 14.5px; color: #1F1A33; font-family: inherit; outline: none; transition: border-color .2s, box-shadow .2s; }
+  input:focus { border-color: #7B5FC7; box-shadow: 0 0 0 5px rgba(123,95,199,.12); }
+  button.submit { width: 100%; height: 52px; border: none; border-radius: 999px; background: linear-gradient(135deg, #533C9D, #7D5FC7); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 18px; box-shadow: 0 12px 28px -10px rgba(83,60,157,.55); transition: transform .2s, box-shadow .2s; }
+  button.submit:hover { transform: translateY(-2px); box-shadow: 0 16px 32px -10px rgba(83,60,157,.6); }
+  .err { margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: rgba(239,68,68,.12); color: #b42020; font-size: 13px; display: none; }
+  .foot { text-align: center; font-size: 12px; color: #8B85A1; margin-top: 18px; }
+  .foot a { color: #533C9D; text-decoration: none; }
+</style>
+</head>
+<body>
+  <form class="card" id="loginForm">
+    <div class="logo-row"><img src="/logo.svg" alt="Lavandery"/></div>
+    <h1>Portal do Condomínio</h1>
+    <p class="sub">Pedidos, chamados, relatórios e comprovantes em um só lugar.</p>
+
+    <label>Nome do condomínio</label>
+    <input id="condoName" placeholder="Ex: Condomínio Max Carneiros" autocomplete="off" autofocus required/>
+
+    <label>Senha</label>
+    <input id="password" type="password" placeholder="••••••••" required/>
+
+    <button class="submit" type="submit">Entrar</button>
+    <div class="err" id="err"></div>
+    <p class="foot">Primeiro acesso? Senha padrão: <b>Mudar123@@2026</b></p>
+  </form>
+
+<script src="/bubbles.js" defer></script>
+<script>
+document.querySelector('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = document.querySelector('#err'); err.style.display = 'none';
+  const condo_name = document.querySelector('#condoName').value.trim();
+  const password = document.querySelector('#password').value;
+  try {
+    const r = await fetch('/api/condo-auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ condo_name, password })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error === 'invalid' ? 'Nome do condomínio ou senha incorretos.' : 'Erro: '+ d.error);
+    location.href = '/condo.html';
+  } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+});
+</script>
+</body>
+</html>

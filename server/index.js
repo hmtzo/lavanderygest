@@ -1604,6 +1604,135 @@ db.exec(`CREATE TABLE IF NOT EXISTS tickets (
 db.exec(`CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_tickets_condo ON tickets(condo_id);`);
 
+// ---------- Portal do Condomínio: pedidos de insumos + pagamentos + fotos ----------
+db.exec(`CREATE TABLE IF NOT EXISTS supply_requests (
+  id TEXT PRIMARY KEY,
+  condo_id TEXT REFERENCES condominiums(id) ON DELETE CASCADE,
+  items TEXT NOT NULL,            -- JSON: [{type:'sabao',qty:5,unit:'L'}, ...]
+  note TEXT,
+  status TEXT DEFAULT 'pendente', -- pendente | aprovado | entregue | cancelado
+  requested_by TEXT,
+  created_at INTEGER DEFAULT (strftime('%s','now')*1000),
+  updated_at INTEGER DEFAULT (strftime('%s','now')*1000)
+);
+CREATE INDEX IF NOT EXISTS idx_sr_condo ON supply_requests(condo_id);
+CREATE INDEX IF NOT EXISTS idx_sr_status ON supply_requests(status);
+
+CREATE TABLE IF NOT EXISTS condo_payments (
+  id TEXT PRIMARY KEY,
+  condo_id TEXT REFERENCES condominiums(id) ON DELETE CASCADE,
+  period TEXT,                    -- '2026-04'
+  type TEXT,                      -- repasse | comprovante
+  amount REAL,
+  reference TEXT,
+  file_url TEXT,
+  note TEXT,
+  created_at INTEGER DEFAULT (strftime('%s','now')*1000)
+);
+CREATE INDEX IF NOT EXISTS idx_cp_condo ON condo_payments(condo_id);
+
+CREATE TABLE IF NOT EXISTS ticket_photos (
+  id TEXT PRIMARY KEY,
+  ticket_id TEXT REFERENCES tickets(id) ON DELETE CASCADE,
+  data_url TEXT NOT NULL,
+  created_at INTEGER DEFAULT (strftime('%s','now')*1000)
+);
+CREATE INDEX IF NOT EXISTS idx_tp_ticket ON ticket_photos(ticket_id);`);
+
+// Helpers
+function requireCondo(req, res) {
+  if (!req.user || req.user.role !== 'condo' || !req.user.condo_id) {
+    res.status(401).json({ error: 'unauthorized' });
+    return null;
+  }
+  return req.user.condo_id;
+}
+function rid(prefix) { return prefix + '_' + Math.random().toString(36).slice(2, 10); }
+
+// Info do condo logado
+app.get('/api/condo/me', (req, res) => {
+  const cid = requireCondo(req, res); if (!cid) return;
+  const c = db.prepare('SELECT id, name, address, city, washers, dryers, maintenance_label FROM condominiums WHERE id=?').get(cid);
+  res.json({ user: req.user, condo: c });
+});
+
+// Pedidos de insumos
+app.get('/api/condo/supply-requests', (req, res) => {
+  const cid = requireCondo(req, res); if (!cid) return;
+  const rows = db.prepare('SELECT * FROM supply_requests WHERE condo_id=? ORDER BY created_at DESC').all(cid);
+  res.json(rows.map(r => ({ ...r, items: JSON.parse(r.items||'[]') })));
+});
+app.post('/api/condo/supply-requests', (req, res) => {
+  const cid = requireCondo(req, res); if (!cid) return;
+  const { items, note } = req.body || {};
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error:'missing_items' });
+  const id = rid('sr');
+  db.prepare('INSERT INTO supply_requests (id,condo_id,items,note,requested_by) VALUES (?,?,?,?,?)').run(id, cid, JSON.stringify(items), note||'', req.user.name||'');
+  res.json({ ok:true, id });
+});
+
+// Chamados do condo
+app.get('/api/condo/tickets', (req, res) => {
+  const cid = requireCondo(req, res); if (!cid) return;
+  const rows = db.prepare('SELECT * FROM tickets WHERE condo_id=? ORDER BY created_at DESC').all(cid);
+  const photoStmt = db.prepare('SELECT data_url FROM ticket_photos WHERE ticket_id=?');
+  res.json(rows.map(r => ({ ...r, photos: photoStmt.all(r.id).map(p => p.data_url) })));
+});
+app.post('/api/condo/tickets', (req, res) => {
+  const cid = requireCondo(req, res); if (!cid) return;
+  const { title, description, category, priority, photos } = req.body || {};
+  if (!title) return res.status(400).json({ error:'missing_title' });
+  const id = rid('tk');
+  db.prepare('INSERT INTO tickets (id,condo_id,title,description,category,priority,opened_by_name) VALUES (?,?,?,?,?,?,?)')
+    .run(id, cid, title, description||'', category||'outro', priority||'media', req.user.name||'');
+  if (Array.isArray(photos)) {
+    const ins = db.prepare('INSERT INTO ticket_photos (id,ticket_id,data_url) VALUES (?,?,?)');
+    for (const p of photos.slice(0, 8)) {
+      if (typeof p === 'string' && p.startsWith('data:image/') && p.length < 4_000_000) {
+        ins.run(rid('tkp'), id, p);
+      }
+    }
+  }
+  res.json({ ok:true, id });
+});
+
+// Pagamentos (condo vê seus comprovantes)
+app.get('/api/condo/payments', (req, res) => {
+  const cid = requireCondo(req, res); if (!cid) return;
+  const rows = db.prepare('SELECT * FROM condo_payments WHERE condo_id=? ORDER BY created_at DESC').all(cid);
+  res.json(rows);
+});
+
+// Admin: listar/criar/atualizar pedidos e pagamentos
+app.get('/api/supply-requests', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const rows = db.prepare(`SELECT sr.*, c.name AS condo_name FROM supply_requests sr
+    LEFT JOIN condominiums c ON c.id=sr.condo_id ORDER BY sr.created_at DESC LIMIT 500`).all();
+  res.json(rows.map(r => ({ ...r, items: JSON.parse(r.items||'[]') })));
+});
+app.patch('/api/supply-requests/:id', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { status, note } = req.body || {};
+  db.prepare('UPDATE supply_requests SET status=COALESCE(?,status), note=COALESCE(?,note), updated_at=? WHERE id=?').run(status, note, Date.now(), req.params.id);
+  res.json({ ok:true });
+});
+
+app.post('/api/condo-payments', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { condo_id, period, type, amount, reference, file_url, note } = req.body || {};
+  if (!condo_id) return res.status(400).json({ error:'missing_condo' });
+  const id = rid('pay');
+  db.prepare('INSERT INTO condo_payments (id,condo_id,period,type,amount,reference,file_url,note) VALUES (?,?,?,?,?,?,?,?)')
+    .run(id, condo_id, period||'', type||'repasse', amount||0, reference||'', file_url||'', note||'');
+  res.json({ ok:true, id });
+});
+app.get('/api/condo-payments', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const rows = db.prepare(`SELECT p.*, c.name AS condo_name FROM condo_payments p
+    LEFT JOIN condominiums c ON c.id=p.condo_id ORDER BY p.created_at DESC LIMIT 500`).all();
+  res.json(rows);
+});
+
 // ---------- Integrations store (key/value, overlay over .env) ----------
 db.exec(`CREATE TABLE IF NOT EXISTS integrations (
   key TEXT PRIMARY KEY,
