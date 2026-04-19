@@ -524,3 +524,42 @@ h3 { font-size: 16px; line-height: 1.4; }
   .page { padding: 20px 16px; }
   .topbar-new { padding: 10px 16px; }
 }
+
+/* ---------- Gradient Quick-Nav Menu (portado de 21st-dev/magic) ---------- */
+.gm-wrap { margin: 0 0 20px 0; display: flex; justify-content: center; }
+.gm-list { list-style: none; display: flex; gap: 16px; padding: 0; margin: 0; flex-wrap: wrap; justify-content: center; }
+.gm-item {
+  position: relative; width: 60px; height: 60px;
+  background: #fff; border-radius: 999px; box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,.08));
+  display: flex; align-items: center; justify-content: center;
+  transition: width .5s ease, box-shadow .5s ease;
+  cursor: pointer; overflow: hidden;
+}
+.gm-item:hover { width: 180px; box-shadow: none; }
+.gm-bg {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: linear-gradient(45deg, var(--gm-from), var(--gm-to));
+  opacity: 0; transition: opacity .5s ease;
+}
+.gm-item:hover .gm-bg { opacity: 1; }
+.gm-glow {
+  position: absolute; left: 0; right: 0; top: 10px; height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(45deg, var(--gm-from), var(--gm-to));
+  filter: blur(15px); opacity: 0; z-index: -1;
+  transition: opacity .5s ease;
+}
+.gm-item:hover .gm-glow { opacity: .5; }
+.gm-icon {
+  position: relative; z-index: 2; color: #6b7280;
+  transition: transform .5s ease;
+  display: flex; align-items: center; justify-content: center;
+}
+.gm-item:hover .gm-icon { transform: scale(0); }
+.gm-title {
+  position: absolute; z-index: 2; color: #fff;
+  text-transform: uppercase; letter-spacing: .08em; font-size: 12px; font-weight: 600;
+  transform: scale(0); transition: transform .5s ease .15s;
+  white-space: nowrap;
+}
+.gm-item:hover .gm-title { transform: scale(1); }
