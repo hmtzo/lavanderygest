@@ -468,33 +468,20 @@
     <div id="rpCondoRates" style="max-height:420px;overflow-y:auto;margin-top:10px"></div>
   </section>
 
-  <!-- MODO 1: Upload CSV/Excel com todos os condomínios -->
+  <!-- ENTRADA MENSAL: tabela com todos condos, digita ciclos, calcula na hora -->
   <section class="card-new" style="margin-bottom:16px;border-left:3px solid var(--brand-600)">
     <div class="card-header">
-      <div><div class="card-title">📁 Upload de planilha (todos os condomínios de uma vez)</div><div class="subtle" style="font-size:12px;margin-top:2px">Colunas: <b>condominio, mes, lavagens, secagens</b>. O valor/ciclo e imposto vem do cadastro de cada condomínio (configurado acima). Opcionalmente você pode passar <b>valor_ciclo</b> e <b>imposto</b> na planilha pra sobrescrever.</div></div>
+      <div><div class="card-title">📅 Lançar repasses do mês</div><div class="subtle" style="font-size:12px;margin-top:2px">Escolha o mês, digite os ciclos de cada condomínio — o repasse é calculado na hora usando o <b>valor configurado</b> acima. Clica em "Salvar tudo" quando terminar.</div></div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <input id="rpMonth" class="input" type="month" style="height:38px;width:180px"/>
+        <button id="rpSaveAllBtn" class="btn-new brand" style="height:38px;white-space:nowrap">💾 Salvar todos</button>
+      </div>
     </div>
-    <div id="rpDrop" style="border:2px dashed var(--ink-200);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .2s">
-      <input type="file" id="rpFile" accept=".csv,.xlsx,.xls" style="display:none"/>
-      <div style="font-size:36px;margin-bottom:8px">📤</div>
-      <div style="font-weight:500;font-size:14px">Arraste o arquivo aqui ou <span style="color:var(--brand-700);text-decoration:underline">clique pra selecionar</span></div>
-      <div class="subtle" style="font-size:11px;margin-top:6px">Aceita CSV e Excel (.xlsx, .xls). <a href="#" id="rpSample" style="color:var(--brand-700)">Baixar modelo</a></div>
+    <div style="font-size:12px;color:var(--ink-600);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+      <span>Total previsto: <b id="rpTotalPreview" style="color:var(--brand-700)">R$ 0,00</b></span>
+      <input id="rpTableSearch" class="input" placeholder="🔎 Buscar" style="width:220px;height:32px;font-size:12px"/>
     </div>
-    <div id="rpBulkResult" style="margin-top:14px"></div>
-  </section>
-
-  <!-- MODO 2: Entrada manual rápida -->
-  <section class="card-new" style="margin-bottom:16px">
-    <div class="card-header">
-      <div><div class="card-title">✍️ Entrada manual (um por vez)</div><div class="subtle" style="font-size:12px">Escolha o condomínio, mês e informe os ciclos. O sistema calcula.</div></div>
-    </div>
-    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end">
-      <div><label style="font-size:11px;color:var(--ink-500)">Condomínio</label><select id="mqCondo" class="input" style="height:42px"></select></div>
-      <div><label style="font-size:11px;color:var(--ink-500)">Mês (YYYY-MM)</label><input id="mqMonth" class="input" type="month" style="height:42px"/></div>
-      <div><label style="font-size:11px;color:var(--ink-500)">Lavagens</label><input id="mqWashes" class="input" type="number" min="0" value="0" style="height:42px"/></div>
-      <div><label style="font-size:11px;color:var(--ink-500)">Secagens</label><input id="mqDries" class="input" type="number" min="0" value="0" style="height:42px"/></div>
-      <button id="mqSaveBtn" class="btn-new brand" style="height:42px;white-space:nowrap">💾 Salvar</button>
-    </div>
-    <div id="mqResult" style="margin-top:12px"></div>
+    <div id="rpMonthTable" style="max-height:540px;overflow-y:auto"></div>
   </section>
 
   <section class="card-new" id="rpsTabsCard" style="margin-bottom:16px;display:none">
@@ -2130,7 +2117,96 @@ function renderCondoRates(filter='') {
 document.querySelector('#rpCondoSearch')?.addEventListener('input', e => renderCondoRates(e.target.value));
 
 const _origLoadRpsSummary = typeof loadRpsSummary === 'function' ? loadRpsSummary : null;
-async function loadRepasseSummary() { loadCondoRates(); if (_origLoadRpsSummary) _origLoadRpsSummary(); }
+async function loadRepasseSummary() {
+  await loadCondoRates();
+  renderMonthTable();
+  if (_origLoadRpsSummary) _origLoadRpsSummary();
+}
+
+// Tabela mensal: 1 linha por condomínio, digita ciclos, calcula repasse ao vivo
+const _moneyBR = n => 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+function renderMonthTable(filter='') {
+  const host = document.querySelector('#rpMonthTable');
+  if (!host) return;
+  const f = (filter||'').toLowerCase();
+  const list = _condosCache.filter(c => !f || (c.name||'').toLowerCase().includes(f));
+  host.innerHTML = `
+    <div style="display:grid;grid-template-columns:1.8fr 90px 90px 110px 130px;gap:6px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--ink-200);position:sticky;top:0;background:#fff;z-index:1">
+      <div>Condomínio</div><div>Lavagens</div><div>Secagens</div><div>Ciclos × R$</div><div style="text-align:right">Repasse líquido</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:3px;margin-top:4px">
+      ${list.map(c => {
+        const rate = c.cycle_rate;
+        const tax = (c.tax_rate || 0) / 100;
+        return `
+        <div class="rp-month-row" data-id="${c.id}" data-rate="${rate||0}" data-tax="${tax}" style="display:grid;grid-template-columns:1.8fr 90px 90px 110px 130px;gap:6px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.5);border-radius:6px;${!rate?'opacity:.55':''}">
+          <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.name)}">${esc(c.name)}${!rate?' <span style="color:#e84855;font-size:11px">⚠ sem repasse</span>':''}</div>
+          <input class="input rp-mt-w" type="number" min="0" placeholder="0" style="height:32px;font-size:13px" ${!rate?'disabled':''}/>
+          <input class="input rp-mt-d" type="number" min="0" placeholder="0" style="height:32px;font-size:13px" ${!rate?'disabled':''}/>
+          <div style="font-size:12px;color:var(--ink-600)" class="rp-mt-formula">${rate?`× ${_moneyBR(rate)}`:'—'}</div>
+          <div style="font-size:13px;font-weight:600;text-align:right;color:var(--brand-700)" class="rp-mt-liq">${_moneyBR(0)}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  host.querySelectorAll('.rp-month-row').forEach(row => {
+    const rate = parseFloat(row.dataset.rate) || 0;
+    const tax = parseFloat(row.dataset.tax) || 0;
+    const wIn = row.querySelector('.rp-mt-w');
+    const dIn = row.querySelector('.rp-mt-d');
+    const cyclesBox = row.querySelector('.rp-mt-formula');
+    const liqBox = row.querySelector('.rp-mt-liq');
+    const recalc = () => {
+      const w = parseInt(wIn.value) || 0, d = parseInt(dIn.value) || 0;
+      const cycles = w + d;
+      const bruto = cycles * rate;
+      const liq = bruto * (1 - tax);
+      cyclesBox.textContent = cycles ? `${cycles} × ${_moneyBR(rate)}` : `× ${_moneyBR(rate)}`;
+      liqBox.textContent = _moneyBR(liq);
+      updateTotalPreview();
+    };
+    [wIn, dIn].forEach(i => i.addEventListener('input', recalc));
+    row._wIn = wIn; row._dIn = dIn;
+  });
+  updateTotalPreview();
+}
+function updateTotalPreview() {
+  let total = 0;
+  document.querySelectorAll('.rp-month-row').forEach(row => {
+    const rate = parseFloat(row.dataset.rate) || 0;
+    const tax = parseFloat(row.dataset.tax) || 0;
+    const w = parseInt(row._wIn?.value) || 0;
+    const d = parseInt(row._dIn?.value) || 0;
+    total += (w + d) * rate * (1 - tax);
+  });
+  const el = document.querySelector('#rpTotalPreview');
+  if (el) el.textContent = _moneyBR(total);
+}
+document.querySelector('#rpTableSearch')?.addEventListener('input', e => renderMonthTable(e.target.value));
+
+// Salvar todos os lançamentos do mês
+document.querySelector('#rpSaveAllBtn')?.addEventListener('click', async () => {
+  const month = document.querySelector('#rpMonth').value;
+  if (!month) { Toast.warning('Escolha o mês'); return; }
+  const rows = [];
+  document.querySelectorAll('.rp-month-row').forEach(row => {
+    const w = parseInt(row._wIn?.value) || 0;
+    const d = parseInt(row._dIn?.value) || 0;
+    if (w + d > 0) {
+      const condo = _condosCache.find(c => c.id === row.dataset.id);
+      rows.push({ condominio: condo?.name, mes: month, lavagens: w, secagens: d });
+    }
+  });
+  if (!rows.length) { Toast.warning('Nenhum ciclo lançado'); return; }
+  const btn = document.querySelector('#rpSaveAllBtn');
+  const orig = btn.textContent; btn.textContent = 'Salvando...'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/repasse/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rows }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || d.error);
+    Toast.success(`${d.processed}/${d.total} repasses salvos`);
+  } catch (e) { Toast.error('Erro: ' + e.message); }
+  btn.textContent = orig; btn.disabled = false;
+});
 
 // Entrada manual
 document.querySelector('#mqSaveBtn')?.addEventListener('click', async () => {
