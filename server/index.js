@@ -1946,19 +1946,25 @@ app.post('/api/repasse/bulk', async (req, res) => {
       const w = parseInt(row.lavagens || row.lavagem || row.washes || 0) || 0;
       const d = parseInt(row.secagens || row.secagem || row.dries || 0) || 0;
       const cyclesExplicit = parseInt(row.ciclos || row.cycles || 0) || 0;
+      // Permite override de rate e tax por linha (BR number tolerante)
+      const parseBR = s => { if (s==null||s==='') return null; const str=String(s).replace(/R\$\s*/g,'').replace(/\./g,'').replace(',','.'); const n=parseFloat(str); return isNaN(n)?null:n; };
+      const rowRate = parseBR(row.valor_ciclo || row['valor/ciclo'] || row.rate || row.reembolso || row['reembolso_por_ciclo']);
+      const rowTax = parseBR(String(row.imposto||row.tax_rate||row.imposto_percentual||'').replace('%',''));
+      const effRate = rowRate != null && rowRate > 0 ? rowRate : r;
+      const effTax = rowTax != null ? (rowTax > 1 ? rowTax/100 : rowTax) : t;
       const matched = matchCondo(condoName);
       const month = normalizeMonth(monthStr);
       if (!matched) { results.push({ condoName, monthStr, ok:false, reason:'no_condo_match' }); continue; }
       if (!month) { results.push({ condoName, monthStr, ok:false, reason:'invalid_month' }); continue; }
       const cycles = (w + d) || cyclesExplicit;
       if (!cycles) { results.push({ condoName, monthStr, ok:false, reason:'no_cycles' }); continue; }
-      const gross = cycles * r;
-      const taxAmount = gross * t;
+      const gross = cycles * effRate;
+      const taxAmount = gross * effTax;
       const repasse = gross - taxAmount;
       const payId = `pay_bulk_${matched.id}_${month}`;
-      upsert.run(payId, matched.id, month, 'repasse', repasse, `R$ ${r.toFixed(2)}/ciclo`,
-        `${cycles} ciclos (${w} lavagens + ${d} secagens) · Bruto R$ ${gross.toFixed(2)} · Imposto ${(t*100).toFixed(2)}% · Repasse líquido`);
-      results.push({ condoName, condo_id: matched.id, condo_name: matched.name, month, cycles, gross, repasse, ok:true });
+      upsert.run(payId, matched.id, month, 'repasse', repasse, `R$ ${effRate.toFixed(2)}/ciclo`,
+        `${cycles} ciclos (${w} lavagens + ${d} secagens) · Bruto R$ ${gross.toFixed(2)} · Imposto ${(effTax*100).toFixed(2)}% · Repasse líquido`);
+      results.push({ condoName, condo_id: matched.id, condo_name: matched.name, month, cycles, gross, repasse, rate: effRate, tax: effTax*100, ok:true });
     }
     const okCount = results.filter(x => x.ok).length;
     const failCount = results.length - okCount;

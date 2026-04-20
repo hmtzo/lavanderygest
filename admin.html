@@ -466,7 +466,7 @@
   <!-- MODO 1: Upload CSV/Excel com todos os condomínios -->
   <section class="card-new" style="margin-bottom:16px;border-left:3px solid var(--brand-600)">
     <div class="card-header">
-      <div><div class="card-title">📁 Upload de planilha (todos os condomínios de uma vez)</div><div class="subtle" style="font-size:12px;margin-top:2px">Arraste ou selecione um arquivo CSV/XLSX. Colunas: <b>condominio, mes, lavagens, secagens</b> (ou <b>ciclos</b>).</div></div>
+      <div><div class="card-title">📁 Upload de planilha (todos os condomínios de uma vez)</div><div class="subtle" style="font-size:12px;margin-top:2px">Colunas obrigatórias: <b>condominio, mes, lavagens, secagens</b>. Opcionais: <b>valor_ciclo</b> e <b>imposto</b> (por condomínio — se vazios usam o global). Aceita CSV e Excel.</div></div>
     </div>
     <div id="rpDrop" style="border:2px dashed var(--ink-200);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .2s">
       <input type="file" id="rpFile" accept=".csv,.xlsx,.xls" style="display:none"/>
@@ -2102,45 +2102,54 @@ document.querySelector('#mqSaveBtn')?.addEventListener('click', async () => {
   } catch (e) { Toast.error('Erro: ' + e.message); }
 });
 
-// Upload CSV/Excel
+// Upload CSV/Excel — parser robusto
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) return existing._loaded ? resolve() : existing.addEventListener('load', resolve);
+    const s = document.createElement('script'); s.src = src;
+    s.onload = () => { s._loaded = true; resolve(); };
+    s.onerror = () => reject(new Error('falha ao carregar '+src));
+    document.head.appendChild(s);
+  });
+}
 async function parseUploadedFile(file) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
-  if (ext === 'csv') {
-    const text = await file.text();
-    return csvToObjects(text);
-  }
-  // Excel via SheetJS CDN
+  // Qualquer extensão: tenta parsear como Excel primeiro (XLSX também lê CSV, números, xls, ods)
   if (!window.XLSX) {
-    await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+    try { await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'); }
+    catch { await loadScript('https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'); }
   }
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array' });
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true, raw: false });
+  if (!wb.SheetNames.length) throw new Error('Arquivo sem abas');
   const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(ws, { defval: '' });
-}
-function csvToObjects(text) {
-  const parse = (t) => {
-    const rows = [], re = /("((?:[^"]|"")*)"|([^,\r\n]*))(,|\r?\n|$)/g;
-    let row = [], m;
-    while ((m = re.exec(t))) {
-      row.push(m[2] !== undefined ? m[2].replace(/""/g,'"') : (m[3] || ''));
-      if (m[4] === ',') continue;
-      rows.push(row); row = [];
-      if (m[4] === '' && m.index + m[0].length >= t.length) break;
-    }
-    return rows.filter(r => r.some(c => c.trim()));
-  };
-  const rows = parse(text);
-  if (!rows.length) return [];
-  const headers = rows[0].map(h => h.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
-  return rows.slice(1).map(r => Object.fromEntries(headers.map((h, i) => [h, (r[i]||'').trim()])));
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+  if (!rows.length) throw new Error('Arquivo sem dados');
+  // Normaliza keys: lowercase + remove acentos
+  const norm = s => String(s||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_');
+  return rows.map(row => {
+    const out = {};
+    for (const k of Object.keys(row)) out[norm(k)] = row[k];
+    return out;
+  });
 }
 async function handleUpload(file) {
   const rate = document.querySelector('#rpGlobalRate').value;
   const tax_rate = document.querySelector('#rpGlobalTax').value;
+  const host = document.querySelector('#rpBulkResult');
+  host.innerHTML = `<div style="padding:12px;background:var(--brand-50);border-radius:10px;font-size:13px">⏳ Processando <b>${file.name}</b> (${(file.size/1024).toFixed(1)}KB)...</div>`;
+  let rows;
   try {
-    const rows = await parseUploadedFile(file);
-    if (!rows.length) { Toast.warning('Arquivo vazio'); return; }
+    rows = await parseUploadedFile(file);
+    if (!rows.length) throw new Error('Arquivo vazio');
+    host.innerHTML = `<div style="padding:12px;background:var(--brand-50);border-radius:10px;font-size:13px">✓ ${rows.length} linhas lidas · enviando pra o servidor...</div>`;
+  } catch (e) {
+    host.innerHTML = `<div style="padding:12px;background:#fee2e2;color:#991b1b;border-radius:10px;font-size:13px">❌ Erro ao ler arquivo: ${e.message}</div>`;
+    Toast.error('Falha ao ler arquivo');
+    return;
+  }
+  try {
     const r = await fetch('/api/repasse/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rows, rate, tax_rate }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || d.error);
@@ -2164,7 +2173,10 @@ async function handleUpload(file) {
       </tr>`).join('')}</tbody></table></div>`;
     document.querySelector('#rpBulkResult').innerHTML = summary + table;
     Toast.success(`${d.processed}/${d.total} processados`);
-  } catch (e) { Toast.error('Erro: ' + e.message); }
+  } catch (e) {
+    host.innerHTML = `<div style="padding:12px;background:#fee2e2;color:#991b1b;border-radius:10px;font-size:13px">❌ Erro do servidor: ${e.message}</div>`;
+    Toast.error('Erro: ' + e.message);
+  }
 }
 const rpDrop = document.querySelector('#rpDrop');
 rpDrop?.addEventListener('click', () => document.querySelector('#rpFile').click());
@@ -2173,12 +2185,16 @@ document.querySelector('#rpFile')?.addEventListener('change', (e) => e.target.fi
 ['dragleave','drop'].forEach(ev => rpDrop?.addEventListener(ev, e => { e.preventDefault(); rpDrop.style.background=''; rpDrop.style.borderColor=''; }));
 rpDrop?.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files[0]) handleUpload(e.dataTransfer.files[0]); });
 
-// Modelo CSV de exemplo
+// Modelo CSV de exemplo — inclui colunas de valor por ciclo e imposto (opcionais)
 document.querySelector('#rpSample')?.addEventListener('click', (e) => {
   e.preventDefault();
-  const csv = 'condominio,mes,lavagens,secagens\nCondomínio Max Carneiros,2026-04,718,458\nCondomínio Aplauso Jabaquara,2026-04,530,410\n';
+  const csv = 'condominio,mes,lavagens,secagens,valor_ciclo,imposto\n' +
+    'Condomínio Max Carneiros,2026-04,718,458,2.50,32.25\n' +
+    'Condomínio Aplauso Jabaquara,2026-04,530,410,3.00,32.25\n' +
+    'Edifício Atlântico,2026-04,280,220,2.00,30\n';
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'modelo-repasse-lavandery.csv'; a.click();
+  Toast.message({ body: 'Modelo baixado. As colunas valor_ciclo e imposto são opcionais — se vazias usam o valor global.' });
 });
 
 // ---------- REPASSE: modo rápido (relatório mensal por condo) ----------
