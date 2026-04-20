@@ -25,7 +25,6 @@ COPY condo.html /app/condo.html
 COPY implantacao.html /app/implantacao.html
 COPY index.html /app/index.html
 COPY login.html /app/login.html
-COPY financeiro.html /app/financeiro.html
 COPY styles.css /app/styles.css
 COPY design.css /app/design.css
 COPY logo.svg /app/logo.svg
