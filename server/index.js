@@ -1859,6 +1859,110 @@ app.get('/api/repasses/report.pdf', async (req, res) => {
   }
 });
 
+// Relatório PDF analítico por condomínio (ano)
+app.get('/api/condominiums/:id/repasse-report.pdf', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const year = req.query.year || String(new Date().getFullYear());
+  const cid = req.params.id;
+  const condo = db.prepare('SELECT * FROM condominiums WHERE id=?').get(cid);
+  if (!condo) return res.status(404).json({ error: 'not_found' });
+  const rows = db.prepare(`SELECT * FROM condo_repasse WHERE condo_id=? AND month LIKE ? ORDER BY month`).all(cid, year+'%');
+  try {
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit:'pt', format:'a4' });
+    const W = 595, pad = 40;
+    doc.setFillColor(83,60,157); doc.rect(0,0,W,70,'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+    doc.text('LAVANDERY · Análise Financeira', pad, 38);
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text(`Período: Janeiro a Dezembro / ${year}`, pad, 56);
+    const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    doc.setTextColor(40);
+    doc.setFont('helvetica','bold'); doc.setFontSize(14);
+    doc.text((condo.name||'').toUpperCase(), pad, 100);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(100);
+    if (condo.address) doc.text(condo.address, pad, 116);
+    doc.text(`${condo.washers||0} lavadoras · ${condo.dryers||0} secadoras`, pad, 130);
+
+    // KPIs
+    const totCiclos = rows.reduce((s,r) => s + (r.cycles||0), 0);
+    const totLav = rows.reduce((s,r) => s + (r.washes||0), 0);
+    const totSec = rows.reduce((s,r) => s + (r.dries||0), 0);
+    const totRepasse = rows.reduce((s,r) => s + (r.repasse_liquido||0), 0);
+    const totLavandery = rows.reduce((s,r) => s + (r.liquido_lavandery||0), 0);
+    const totBruto = rows.reduce((s,r) => s + (r.repasse_bruto||0), 0);
+    const totImposto = rows.reduce((s,r) => s + (r.imposto||0), 0);
+    const totReceita = rows.reduce((s,r) => s + (r.receita_maquina||0), 0);
+
+    let yy = 160;
+    doc.setDrawColor(220); doc.line(pad, yy-5, W-pad, yy-5);
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(30);
+    doc.text('RESUMO DO ANO', pad, yy+10); yy += 24;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(60);
+    const kpis = [
+      ['Total de ciclos', totCiclos.toLocaleString('pt-BR')],
+      ['  Lavagens', totLav.toLocaleString('pt-BR')],
+      ['  Secagens', totSec.toLocaleString('pt-BR')],
+      ['Receita bruta (máquina)', money(totReceita)],
+      ['Repasse bruto', money(totBruto)],
+      ['Imposto recolhido', money(totImposto)],
+      ['REPASSE PAGO AO CONDOMÍNIO', money(totRepasse)],
+      ['Líquido Lavandery', money(totLavandery)],
+    ];
+    for (const [a,b] of kpis) {
+      const isHighlight = a.startsWith('REPASSE');
+      if (isHighlight) { doc.setFillColor(246,243,250); doc.rect(pad-4, yy-10, W-2*pad+8, 22, 'F'); doc.setFont('helvetica','bold'); doc.setTextColor(83,60,157); }
+      else { doc.setFont('helvetica','normal'); doc.setTextColor(60); }
+      doc.text(a, pad, yy);
+      doc.text(b, W-pad, yy, { align:'right' });
+      yy += 20;
+    }
+
+    // Tabela mensal
+    yy += 10;
+    doc.setFillColor(246,243,250); doc.rect(pad, yy, W-2*pad, 22, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(80);
+    const cols = [
+      { l:'Mês', x: pad+4, a:'left' },
+      { l:'Ciclos', x: pad+80, a:'right' },
+      { l:'Bruto', x: pad+140, a:'right' },
+      { l:'Imposto', x: pad+220, a:'right' },
+      { l:'Repasse', x: pad+310, a:'right' },
+      { l:'Lavandery', x: pad+400, a:'right' },
+    ];
+    yy += 14;
+    cols.forEach(c => doc.text(c.l, c.x, yy, { align: c.a }));
+    yy += 18;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    for (const r of rows) {
+      if (yy > 760) { doc.addPage(); yy = 40; }
+      const mo = parseInt((r.month||'').slice(5,7),10);
+      doc.setDrawColor(235); doc.line(pad, yy+3, W-pad, yy+3); doc.setTextColor(50);
+      doc.text(`${meses[mo-1]||'-'} ${r.month?.slice(0,4)||''}`, cols[0].x, yy, { align: cols[0].a });
+      doc.text(String(r.cycles||0), cols[1].x, yy, { align: cols[1].a });
+      doc.text(money(r.repasse_bruto), cols[2].x, yy, { align: cols[2].a });
+      doc.setTextColor(200,50,50); doc.text(money(r.imposto), cols[3].x, yy, { align: cols[3].a });
+      doc.setTextColor(83,60,157); doc.text(money(r.repasse_liquido), cols[4].x, yy, { align: cols[4].a });
+      doc.setTextColor(30,150,100); doc.text(r.liquido_lavandery!=null?money(r.liquido_lavandery):'—', cols[5].x, yy, { align: cols[5].a });
+      yy += 16;
+    }
+
+    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(120);
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, pad, 820);
+    doc.text('Lavandery · Inova Tecnologia e Serviços', W-pad, 820, { align:'right' });
+
+    const buffer = Buffer.from(doc.output('arraybuffer'));
+    res.setHeader('Content-Type','application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="analise_${cid}_${year}.pdf"`);
+    res.send(buffer);
+  } catch (e) {
+    console.error('[repasse-report]', e);
+    res.status(500).json({ error:'pdf_failed', detail: String(e.message||e) });
+  }
+});
+
 app.delete('/api/condominiums/:id/repasse/:month', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   db.prepare('DELETE FROM condo_repasse WHERE condo_id=? AND month=?').run(req.params.id, req.params.month);
