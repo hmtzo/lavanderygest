@@ -13,7 +13,7 @@ import { waStatus, waConnect, waDisconnect, waSendText, waAutoStart } from './wh
 import { gmapsTest, gmapsGeocode, gmapsRoute, s3Test, s3PresignUpload, s3PutObject, asaasTest, asaasCreateCustomer, asaasCreateCharge, asaasListCharges, sentryInit, sentryCapture, sentryTest } from './integrations-services.js';
 import { firebaseTest, firebaseUpload } from './firebase.js';
 import { driveTest, driveUpload } from './gdrive.js';
-import { moskitTest, moskitListCompanies, moskitUpsertCompany, moskitCreateDeal, moskitCreateActivity, moskitListPipelines, moskitListDeals } from './moskit.js';
+import { moskitTest, moskitListCompanies, moskitUpsertCompany, moskitCreateDeal, moskitCreateActivity, moskitListPipelines, moskitListDeals, moskitListContacts, moskitListActivities, moskitListUsers, moskitStats } from './moskit.js';
 import { generateDeliveryReceipt, generateSurveyChecklist, generateInstallationReport, generateEquipmentDeliveryTerm } from './pdf-templates.js';
 import { setupAuth, authMiddleware, requireAuth, authRoutes, publicMiddleware, PUBLIC_PATHS } from './auth.js';
 import { fetchCalendars } from './calendar.js';
@@ -3201,6 +3201,30 @@ app.get('/api/moskit/companies', async (req, res) => {
 app.get('/api/moskit/pipelines', async (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   try { res.json(await moskitListPipelines(getIntegration('moskit'))); }
+  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+app.get('/api/moskit/stats', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try { res.json(await moskitStats(getIntegration('moskit'))); }
+  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+app.get('/api/moskit/contacts', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try { res.json(await moskitListContacts(getIntegration('moskit'), { limit: parseInt(req.query.limit||'100') })); }
+  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+app.get('/api/moskit/activities', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try { res.json(await moskitListActivities(getIntegration('moskit'), { limit: parseInt(req.query.limit||'100') })); }
+  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+app.get('/api/moskit/users', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try { res.json(await moskitListUsers(getIntegration('moskit'))); }
   catch (e) { res.status(500).json({ error: String(e.message||e) }); }
 });
 

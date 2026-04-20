@@ -68,6 +68,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
       Repasses
     </a>
+    <a href="#" data-tab="moskit" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l10 4v6c0 5-4 9-10 10-6-1-10-5-10-10V6l10-4z"/></svg>
+      Moskit CRM
+    </a>
 
     <div class="sidebar-section">Cadastro</div>
     <a href="#" data-tab="condos" class="tab nav-item">
@@ -539,6 +543,34 @@
   <div id="cpTabImplantation" class="cp-panel" style="display:none"></div>
   <div id="cpTabPortal" class="cp-panel" style="display:none"></div>
   <div id="cpTabDocuments" class="cp-panel" style="display:none"></div>
+</main>
+
+<!-- MOSKIT CRM -->
+<main class="page hidden" id="moskitMain">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Moskit CRM</h1>
+      <p>Veja tudo que está no seu CRM sincronizado com os condomínios.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="mkReload" class="btn-new ghost">↻ Atualizar</button>
+      <a href="https://app.moskitcrm.com" target="_blank" class="btn-new brand">↗ Abrir Moskit</a>
+    </div>
+  </div>
+
+  <section class="grid-cards stagger" id="mkKpis" style="margin-bottom:16px"></section>
+
+  <!-- Tabs internas -->
+  <div class="cp-tabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--ink-200);overflow-x:auto">
+    <button class="cp-tab mkTab active" data-mkview="companies">🏢 Empresas</button>
+    <button class="cp-tab mkTab" data-mkview="contacts">👤 Contatos</button>
+    <button class="cp-tab mkTab" data-mkview="deals">💼 Oportunidades</button>
+    <button class="cp-tab mkTab" data-mkview="activities">📋 Atividades</button>
+    <button class="cp-tab mkTab" data-mkview="pipelines">📊 Funis</button>
+    <button class="cp-tab mkTab" data-mkview="users">👥 Usuários</button>
+  </div>
+
+  <div id="mkView"></div>
 </main>
 
 <main class="page hidden" id="repassesMain">
@@ -2315,7 +2347,7 @@ async function initGlobe() {
 // globo removido
 
 // ---------- Tabs ----------
-const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos', repasses:'Repasses' };
+const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos', repasses:'Repasses', moskit:'Moskit CRM' };
 function showTab(tab) {
   document.querySelectorAll('.tab').forEach(a => a.classList.toggle('active', a.dataset.tab===tab));
   const crumb = document.querySelector('#crumbTitle');
@@ -2330,6 +2362,8 @@ function showTab(tab) {
   document.querySelector('#deliveriesMain')?.classList.toggle('hidden', tab!=='deliveries');
   document.querySelector('#repassesMain')?.classList.toggle('hidden', tab!=='repasses');
   if (tab === 'repasses') loadRepassesPage();
+  document.querySelector('#moskitMain')?.classList.toggle('hidden', tab!=='moskit');
+  if (tab === 'moskit') loadMoskit();
   document.querySelector('#condoPanelMain')?.classList.toggle('hidden', tab!=='condoPanel');
   document.querySelector('#calendarMain')?.classList.toggle('hidden', tab!=='calendar');
   if (tab === 'implantations') loadImplantations();
@@ -2750,6 +2784,118 @@ document.querySelector('#cpPdf')?.addEventListener('click', () => {
   const year = String(new Date().getFullYear());
   window.open(`/api/condominiums/${_cpCondo.id}/repasse-report.pdf?year=${year}`, '_blank');
 });
+
+// ---------- MOSKIT CRM (aba dedicada) ----------
+let _mkView = 'companies';
+async function loadMoskit() {
+  // KPIs
+  try {
+    const s = await fetch('/api/moskit/stats').then(r => r.ok?r.json():null);
+    if (!s) { document.querySelector('#mkKpis').innerHTML = '<div class="card-new" style="padding:20px"><p>⚠ API key não configurada. Vá em <b>Integrações → Moskit CRM</b>.</p></div>'; return; }
+    const items = [
+      ['Empresas', s.companies||'—', '#533C9D'],
+      ['Contatos', s.contacts||'—', '#7B5FC7'],
+      ['Oportunidades', s.deals||'—', '#10B981'],
+      ['Atividades', s.activities||'—', '#F59E0B'],
+      ['Usuários', s.users||'—', '#3B82F6'],
+    ];
+    document.querySelector('#mkKpis').innerHTML = items.map(([l,v,c]) => `
+      <div class="stat-card" style="--accent:${c}">
+        <div class="stat-label">${l}</div>
+        <div class="stat-value mini">${v}</div>
+        <div class="stat-sub">no Moskit</div>
+      </div>`).join('');
+  } catch (e) {
+    document.querySelector('#mkKpis').innerHTML = '<div class="card-new" style="padding:20px"><p style="color:#dc2626">Erro: '+esc(e.message)+'</p></div>';
+  }
+  loadMkView(_mkView);
+}
+
+async function loadMkView(view) {
+  _mkView = view;
+  document.querySelectorAll('.mkTab').forEach(t => t.classList.toggle('active', t.dataset.mkview === view));
+  const host = document.querySelector('#mkView');
+  host.innerHTML = '<div class="card-new" style="padding:40px;text-align:center;color:var(--ink-500)">⏳ Carregando...</div>';
+  try {
+    const url = {
+      companies: '/api/moskit/companies',
+      contacts: '/api/moskit/contacts',
+      deals: '/api/moskit/deals',
+      activities: '/api/moskit/activities',
+      pipelines: '/api/moskit/pipelines',
+      users: '/api/moskit/users',
+    }[view];
+    const data = await fetch(url).then(r => r.ok?r.json():[]);
+    if (!Array.isArray(data) || !data.length) {
+      host.innerHTML = '<div class="card-new" style="padding:40px;text-align:center;color:var(--ink-400)">Nenhum registro encontrado no Moskit.</div>';
+      return;
+    }
+    host.innerHTML = renderMkList(view, data);
+  } catch (e) {
+    host.innerHTML = '<div class="card-new" style="padding:20px;color:#dc2626">Erro: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderMkList(view, rows) {
+  const _date = t => t ? new Date(t).toLocaleDateString('pt-BR') : '—';
+  const _money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  let headers = [], cells = () => [];
+  switch (view) {
+    case 'companies':
+      headers = ['Nome', 'CNPJ', 'Cidade', 'E-mail', 'Telefone'];
+      cells = r => [r.name, r.cnpj||'—', r.city||'—', r.email||'—', r.phone||'—'];
+      break;
+    case 'contacts':
+      headers = ['Nome', 'Cargo', 'E-mail', 'Telefone', 'Empresa'];
+      cells = r => [r.name, r.role||'—', r.email||'—', r.phone||'—', r.company?.name||r.companyName||'—'];
+      break;
+    case 'deals':
+      headers = ['Nome', 'Valor', 'Fase', 'Empresa', 'Responsável', 'Criado'];
+      cells = r => [r.name, _money(r.value), r.stage?.name||r.stageName||'—', r.company?.name||r.companyName||'—', r.owner?.name||r.ownerName||'—', _date(r.createdAt)];
+      break;
+    case 'activities':
+      headers = ['Tipo', 'Resumo', 'Empresa', 'Vencimento', 'Status'];
+      cells = r => [r.type||'—', (r.comments||'').slice(0,80), r.company?.name||r.companyName||'—', _date(r.dueDate), r.done?'✓ concluída':'pendente'];
+      break;
+    case 'pipelines':
+      headers = ['Nome', 'Fases'];
+      cells = r => [r.name, (r.stages||[]).map(s => s.name).join(' → ')];
+      break;
+    case 'users':
+      headers = ['Nome', 'E-mail', 'Perfil', 'Ativo'];
+      cells = r => [r.name, r.email||'—', r.role||r.profile?.name||'—', r.active!==false?'✓':'—'];
+      break;
+  }
+  return `
+    <div class="card-new" style="padding:0;overflow:hidden">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--ink-100);display:flex;justify-content:space-between;align-items:center">
+        <b>${rows.length} ${view}</b>
+        <input placeholder="🔎 Filtrar..." id="mkFilter" style="padding:6px 12px;border:1px solid var(--ink-200);border-radius:8px;font-size:12px;width:220px"/>
+      </div>
+      <div style="overflow-x:auto;max-height:640px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead style="background:var(--ink-50);position:sticky;top:0"><tr>
+            ${headers.map(h => `<th style="text-align:left;padding:10px 14px;font-weight:600;color:var(--ink-500);font-size:11px;text-transform:uppercase;letter-spacing:.04em">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody id="mkTbody">
+            ${rows.map(r => `<tr class="mkRow" style="border-top:1px solid var(--ink-100)">${cells(r).map(c => `<td style="padding:10px 14px">${esc(String(c||''))}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+document.addEventListener('click', e => {
+  const mt = e.target.closest('.mkTab');
+  if (mt) loadMkView(mt.dataset.mkview);
+});
+document.addEventListener('input', e => {
+  if (e.target?.id === 'mkFilter') {
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('.mkRow').forEach(r => r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none');
+  }
+});
+document.querySelector('#mkReload')?.addEventListener('click', loadMoskit);
 
 // ---------- Aba REPASSES (dedicada) ----------
 let _rpPageCondos = [];

@@ -122,3 +122,39 @@ export async function moskitListPipelines(cfg) {
 export async function moskitListDeals(cfg, { limit = 100, offset = 0 } = {}) {
   return moskitFetch(cfg, `/deals?limit=${limit}&offset=${offset}`);
 }
+
+// Lista contatos
+export async function moskitListContacts(cfg, { limit = 100, offset = 0 } = {}) {
+  return moskitFetch(cfg, `/contacts?limit=${limit}&offset=${offset}`);
+}
+
+// Lista atividades
+export async function moskitListActivities(cfg, { limit = 100, offset = 0 } = {}) {
+  return moskitFetch(cfg, `/activities?limit=${limit}&offset=${offset}`);
+}
+
+// Lista usuários
+export async function moskitListUsers(cfg) {
+  return moskitFetch(cfg, '/users');
+}
+
+// Stats consolidados (faz várias chamadas em paralelo)
+export async function moskitStats(cfg) {
+  const [companies, contacts, deals, activities, users] = await Promise.allSettled([
+    moskitListCompanies(cfg, { limit: 1 }),
+    moskitListContacts(cfg, { limit: 1 }),
+    moskitListDeals(cfg, { limit: 1 }),
+    moskitListActivities(cfg, { limit: 1 }),
+    moskitListUsers(cfg),
+  ]);
+  return {
+    companies: companies.status === 'fulfilled' ? (Array.isArray(companies.value) ? companies.value.length : 0) : 0,
+    contacts: contacts.status === 'fulfilled' ? (Array.isArray(contacts.value) ? contacts.value.length : 0) : 0,
+    deals: deals.status === 'fulfilled' ? (Array.isArray(deals.value) ? deals.value.length : 0) : 0,
+    activities: activities.status === 'fulfilled' ? (Array.isArray(activities.value) ? activities.value.length : 0) : 0,
+    users: users.status === 'fulfilled' ? (Array.isArray(users.value) ? users.value.length : 0) : 0,
+    errors: [companies, contacts, deals, activities, users]
+      .map((r, i) => r.status === 'rejected' ? { kind: ['companies','contacts','deals','activities','users'][i], err: String(r.reason?.message || r.reason) } : null)
+      .filter(Boolean),
+  };
+}
