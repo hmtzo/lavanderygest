@@ -91,6 +91,11 @@ app.use('/api', (req, res, next) => {
 
 app.use(express.static(path.join(__dirname, '..')));
 
+// Uploads persistentes (disco /data no Render) — também serve como /uploads/*
+const UPLOADS_DIR = process.env.UPLOADS_DIR || (process.env.NODE_ENV === 'production' ? '/data/uploads' : path.join(__dirname, '..', 'uploads'));
+try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch {}
+app.use('/uploads', express.static(UPLOADS_DIR));
+
 // ----- Auth (simple) -----
 app.post('/api/auth/login', (req,res) => {
   const { email, pin } = req.body||{};
@@ -1935,7 +1940,7 @@ app.post('/api/condominiums/:id/repasse', (req, res) => {
   let attUrl = null, attName = null;
   if (b.attachment && b.attachment.startsWith('data:') && b.attachment.length < 6_000_000) {
     try {
-      const dir = path.join(__dirname, '..', 'uploads', 'repasse');
+      const dir = path.join(UPLOADS_DIR, 'repasse');
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const ext = (b.attachment_name||'anexo').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,5) || 'bin';
       const fname = `${id}_${Date.now()}.${ext}`;
@@ -2943,21 +2948,33 @@ app.post('/api/integrations/gdrive/test', async (_req, res) => {
   res.json(await driveTest(cfg));
 });
 
-// Upload photo — prioriza Google Drive, fallback Firebase Storage
+// Upload photo — local storage (prioridade), fallback Drive → Firebase
 app.post('/api/uploads/photo', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'no_file' });
-  const visitId = req.body?.visit_id || 'misc';
-  const tag = (req.body?.tag || 'foto').replace(/[^\w-]/g, '');
-  const filename = `${visitId}-${tag}-${Date.now()}-${Math.random().toString(36).slice(2,6)}.jpg`;
+  const visitId = (req.body?.visit_id || 'misc').replace(/[^\w-]/g, '').slice(0, 40);
+  const tag = (req.body?.tag || 'foto').replace(/[^\w-]/g, '').slice(0, 30);
+  const ext = (req.file.mimetype||'').split('/')[1]?.replace(/[^a-z0-9]/g,'').slice(0,4) || 'jpg';
+  const filename = `${visitId}-${tag}-${Date.now()}-${Math.random().toString(36).slice(2,6)}.${ext}`;
 
+  // 1) Tenta salvar local no disco persistente (/data/uploads em prod)
+  try {
+    const dir = path.join(UPLOADS_DIR, 'photos', visitId);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, filename), req.file.buffer);
+    const url = `/uploads/photos/${visitId}/${filename}`;
+    return res.json({ ok: true, provider: 'local', url, name: filename });
+  } catch (e) { console.error('[upload] local failed, trying cloud:', e.message); }
+
+  // 2) Fallback Google Drive
   const gdrive = getIntegration('gdrive');
   if (gdrive && (gdrive.folder_id || gdrive.service_account_json)) {
     try {
       const r = await driveUpload(gdrive, { name: filename, mimeType: req.file.mimetype || 'image/jpeg', body: req.file.buffer });
       return res.json({ ok: true, provider: 'gdrive', ...r });
-    } catch (e) { console.error('[upload] gdrive failed, fallback:', e.message); }
+    } catch (e) { console.error('[upload] gdrive failed:', e.message); }
   }
 
+  // 3) Fallback Firebase
   const firebase = getIntegration('firebase');
   if (firebase) {
     try {
@@ -2967,7 +2984,7 @@ app.post('/api/uploads/photo', upload.single('file'), async (req, res) => {
     } catch (e) { console.error('[upload] firebase failed:', e.message); }
   }
 
-  res.status(400).json({ error: 'no_upload_backend_configured' });
+  res.status(500).json({ error: 'all_backends_failed' });
 });
 
 // Backward-compat
