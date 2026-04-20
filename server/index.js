@@ -2096,6 +2096,114 @@ app.get('/api/repasses/report.pdf', async (req, res) => {
   }
 });
 
+// Relatório mensal individual por condomínio (formato For Consolação)
+app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
+  if (!req.user || !['admin','gestor','condo'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const cid = req.user.role === 'condo' ? req.user.condo_id : req.params.id;
+  const month = req.query.month;
+  if (!month || !cid) return res.status(400).json({ error: 'missing_params' });
+  const condo = db.prepare('SELECT * FROM condominiums WHERE id=?').get(cid);
+  if (!condo) return res.status(404).json({ error:'not_found' });
+  const r = db.prepare('SELECT * FROM condo_repasse WHERE condo_id=? AND month=?').get(cid, month);
+  if (!r) return res.status(404).json({ error:'no_repasse_for_month' });
+
+  try {
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const W = 595, H = 842, pad = 40;
+    const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const [y, mo] = month.split('-');
+    const mesNome = meses[parseInt(mo,10)-1];
+
+    // Header Lavandery
+    doc.setFillColor(83, 60, 157); doc.rect(0, 0, W, 80, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(22);
+    doc.text('LAVANDERY', pad, 45);
+    doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    doc.text(`Relatório Mensal de Repasse · ${mesNome}/${y}`, pad, 62);
+
+    // Condomínio
+    doc.setTextColor(30);
+    doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.text((condo.name||'').toUpperCase(), pad, 115);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(100);
+    if (condo.address) doc.text(condo.address, pad, 131);
+    if (condo.cnpj) doc.text(`CNPJ: ${condo.cnpj}`, pad, 145);
+
+    doc.setDrawColor(200); doc.line(pad, 165, W-pad, 165);
+
+    // Resumo estilo For Consolação
+    let yy = 195;
+    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(30);
+    doc.text('RESUMO DO MÊS', pad, yy); yy += 22;
+
+    const cycles = r.cycles || ((r.washes||0) + (r.dries||0));
+    const unitRate = r.type === 'fixed' ? r.value : (r.price > 0 ? (r.value/100 * r.price) : 0);
+    const washValue = (r.washes||0) * unitRate;
+    const dryValue = (r.dries||0) * unitRate;
+
+    const rows = [
+      ['TOTAL DE CICLOS LAVAGEM', r.washes||0, money(washValue)],
+      ['TOTAL DE CICLOS SECAGEM', r.dries||0, money(dryValue)],
+      [r.type==='fixed' ? 'REEMBOLSO POR CICLO' : `REPASSE (% sobre ${money(r.price)}/ciclo)`, '', r.type==='fixed' ? money(r.value) : r.value + '%'],
+      ['VALOR BRUTO CICLOS', '', money(r.repasse_bruto)],
+      ['ICMS, PIS, COFINS, ISS, TAXA DE CARTÃO', `${r.tax_pct||0}%`, money(r.imposto)],
+      ['TOTAL REPASSE', '', money(r.repasse_liquido)],
+    ];
+
+    doc.setFontSize(10);
+    for (const [label, qty, val] of rows) {
+      const isTotal = label === 'TOTAL REPASSE' || label === 'VALOR BRUTO CICLOS';
+      if (isTotal) {
+        doc.setFillColor(245,240,255);
+        doc.rect(pad-4, yy-12, W-2*pad+8, 22, 'F');
+        doc.setFont('helvetica','bold'); doc.setTextColor(83,60,157);
+      } else {
+        doc.setFont('helvetica','normal'); doc.setTextColor(60);
+      }
+      doc.text(label, pad, yy);
+      if (qty !== '') doc.text(String(qty), 340, yy, { align: 'right' });
+      doc.text(val, W-pad, yy, { align: 'right' });
+      yy += 22;
+    }
+
+    // Bloco de texto descritivo
+    yy += 10;
+    doc.setFont('helvetica','italic'); doc.setFontSize(10); doc.setTextColor(80);
+    const descText = `Durante o mês de ${mesNome}/${y}, foram registrados ${cycles} ciclos (${r.washes||0} lavagens + ${r.dries||0} secagens). Após a aplicação de impostos e taxas (${r.tax_pct||0}% sobre o valor bruto), totalizando ${money(r.imposto)}, o valor de repasse líquido ao condomínio é de ${money(r.repasse_liquido)}.`;
+    const descLines = doc.splitTextToSize(descText, W - 2*pad);
+    doc.text(descLines, pad, yy);
+    yy += descLines.length * 14 + 20;
+
+    // Dados bancários (se houver)
+    if (condo.bank_name || condo.bank_agency || condo.bank_account) {
+      doc.setFillColor(246, 243, 250);
+      doc.roundedRect(pad, yy, W - 2*pad, 76, 8, 8, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(83,60,157);
+      doc.text('DADOS PARA REPASSE', pad + 14, yy + 20);
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(50);
+      doc.text(`Banco: ${condo.bank_name||'—'}`, pad + 14, yy + 38);
+      doc.text(`Agência: ${condo.bank_agency||'—'}`, pad + 14, yy + 54);
+      doc.text(`Conta: ${condo.bank_account||'—'}`, pad + 14, yy + 70);
+      yy += 96;
+    }
+
+    // Rodapé
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(150);
+    doc.text(`Lavandery — Inova Tecnologia e Serviços e Representação Ltda · CNPJ 45.061.358/0001-62`, pad, H - 40);
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, W - pad, H - 40, { align:'right' });
+
+    const buf = Buffer.from(doc.output('arraybuffer'));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="repasse_${(condo.name||'').replace(/[^a-z0-9]/gi,'_')}_${month}.pdf"`);
+    res.send(buf);
+  } catch (e) {
+    console.error('[monthly-report]', e);
+    res.status(500).json({ error: 'pdf_failed', detail: String(e.message||e) });
+  }
+});
+
 // Relatório PDF analítico por condomínio (ano)
 app.get('/api/condominiums/:id/repasse-report.pdf', async (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });

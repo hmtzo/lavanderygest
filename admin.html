@@ -2950,12 +2950,12 @@ function renderRpPage(filter='') {
   const displayName = c => c.contract_name || c.name;
   const list = _rpPageCondos.filter(c => !f || displayName(c).toLowerCase().includes(f));
   host.innerHTML = `
-    <div style="display:grid;grid-template-columns:2fr 70px 70px 100px 80px 100px 70px 140px 40px;gap:6px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ink-200);position:sticky;top:0;background:#fff;z-index:1">
+    <div style="display:grid;grid-template-columns:2fr 70px 70px 100px 80px 100px 70px 140px 88px;gap:6px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ink-200);position:sticky;top:0;background:#fff;z-index:1">
       <div>Condomínio (contrato)</div>
       <div>Lavagens</div><div>Secagens</div>
       <div>Valor ciclo</div><div>Tipo</div><div>Valor repasse</div><div>Imposto %</div>
       <div style="text-align:right">Repasse FINAL</div>
-      <div></div>
+      <div style="text-align:center">Ações</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr;gap:3px;margin-top:4px">
       ${list.map(c => {
@@ -2965,7 +2965,7 @@ function renderRpPage(filter='') {
         const tax = r.tax_pct != null ? r.tax_pct : (c.tax_rate || 32.25);
         const price = r.price != null ? r.price : (c.cycle_price || '');
         return `
-        <div class="rpp-row" data-id="${c.id}" style="display:grid;grid-template-columns:2fr 70px 70px 100px 80px 100px 70px 140px 40px;gap:6px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.5);border-radius:6px">
+        <div class="rpp-row" data-id="${c.id}" style="display:grid;grid-template-columns:2fr 70px 70px 100px 80px 100px 70px 140px 88px;gap:6px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.5);border-radius:6px">
           <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(displayName(c))}">${esc(displayName(c))}</div>
           <input class="input rpp-w" type="number" min="0" placeholder="0" value="${r.washes||''}" style="height:30px;font-size:12px;padding:0 6px"/>
           <input class="input rpp-d" type="number" min="0" placeholder="0" value="${r.dries||''}" style="height:30px;font-size:12px;padding:0 6px"/>
@@ -2977,11 +2977,20 @@ function renderRpPage(filter='') {
           <input class="input rpp-v" type="number" step="0.01" min="0" placeholder="0" value="${val}" style="height:30px;font-size:12px;padding:0 6px"/>
           <input class="input rpp-tax" type="number" step="0.01" min="0" placeholder="32.25" value="${tax}" style="height:30px;font-size:12px;padding:0 6px"/>
           <div class="rpp-liq" style="font-size:14px;font-weight:700;color:var(--brand-700);text-align:right">${_moneyRp(r.repasse_liquido)}</div>
-          <button class="rpp-panel" data-id="${c.id}" title="Painel analítico" style="background:none;border:1px solid var(--ink-200);border-radius:6px;height:30px;width:30px;cursor:pointer;font-size:14px">📊</button>
+          <div style="display:flex;gap:3px;justify-content:center">
+            <button class="rpp-pdf" data-id="${c.id}" title="Baixar relatório mensal (PDF)" style="background:none;border:1px solid var(--ink-200);border-radius:6px;height:30px;width:30px;cursor:pointer;font-size:13px">📄</button>
+            <button class="rpp-panel" data-id="${c.id}" title="Painel analítico anual" style="background:none;border:1px solid var(--ink-200);border-radius:6px;height:30px;width:30px;cursor:pointer;font-size:13px">📊</button>
+          </div>
         </div>`;
       }).join('')}
     </div>`;
   host.querySelectorAll('.rpp-panel').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); openCondoPanel(btn.dataset.id); }));
+  host.querySelectorAll('.rpp-pdf').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const month = document.querySelector('#rpPageMonth').value;
+    if (!month) { Toast.warning('Escolha o mês'); return; }
+    window.open(`/api/condominiums/${btn.dataset.id}/monthly-report.pdf?month=${month}`, '_blank');
+  }));
   host.querySelectorAll('.rpp-row').forEach(row => {
     const get = s => row.querySelector(s);
     const recalc = () => {
