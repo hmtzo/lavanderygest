@@ -1483,6 +1483,38 @@ async function openCondoDrawer(id) {
         <div id="cycleLogs" style="margin-top:12px;font-size:12px;max-height:200px;overflow-y:auto"></div>
       </div>
 
+      <div class="section-title">💰 Repasse do mês</div>
+      <div class="card" style="padding:14px">
+        <div class="grid grid-cols-3 gap-3 mb-3">
+          <div><label class="label">Mês</label><input id="rpMonth" type="month" class="input py-1" style="min-height:34px"/></div>
+          <div><label class="label">Lavagens</label><input id="rpWashes" type="number" min="0" class="input py-1" style="min-height:34px" placeholder="0"/></div>
+          <div><label class="label">Secagens</label><input id="rpDries" type="number" min="0" class="input py-1" style="min-height:34px" placeholder="0"/></div>
+        </div>
+        <div class="grid grid-cols-3 gap-3 mb-3">
+          <div>
+            <label class="label">Tipo de repasse</label>
+            <select id="rpType" class="select py-1" style="min-height:34px">
+              <option value="fixed">Valor fixo (R$/ciclo)</option>
+              <option value="percent">Percentual (%)</option>
+            </select>
+          </div>
+          <div><label class="label" id="rpValLabel">Valor (R$/ciclo)</label><input id="rpVal" type="number" step="0.01" min="0" class="input py-1" style="min-height:34px" placeholder="2.50" value="${c.cycle_rate||''}"/></div>
+          <div><label class="label">Imposto (%)</label><input id="rpTax" type="number" step="0.01" min="0" class="input py-1" style="min-height:34px" placeholder="32.25" value="${c.tax_rate||''}"/></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div><label class="label">Preço da máquina (R$/ciclo) <span class="text-xs text-gray-400">opcional</span></label><input id="rpPrice" type="number" step="0.01" min="0" class="input py-1" style="min-height:34px" placeholder="7.00" value="${c.cycle_price||''}"/></div>
+          <div>
+            <label class="label">Planilha de uso <span class="text-xs text-gray-400">opcional (anexo)</span></label>
+            <input id="rpFile" type="file" accept=".csv,.xlsx,.xls,image/*,application/pdf" class="input py-1" style="min-height:34px;padding:4px"/>
+          </div>
+        </div>
+        <div id="rpResult" style="background:var(--ink-50, #f6f3fa);border-radius:10px;padding:14px;margin-top:10px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+          <button id="rpSaveBtn" class="btn btn-primary" style="width:auto;padding:0 22px;height:36px;min-height:0">💾 Salvar repasse do mês</button>
+        </div>
+        <div id="rpHistory" style="margin-top:14px;font-size:12px;border-top:1px solid var(--ink-100);padding-top:10px"></div>
+      </div>
+
       <div class="section-title">Próximas visitas</div>
       <div class="card" style="padding:10px 14px">${scheduleRows}</div>
 
@@ -1540,6 +1572,110 @@ async function openCondoDrawer(id) {
       openCondoDrawer(c.id);
     });
   });
+  // ---------- Módulo Repasse do Mês ----------
+  (function setupRepasseModule() {
+    const $ = s => drawer.querySelector(s);
+    const mIn = $('#rpMonth'), wIn = $('#rpWashes'), dIn = $('#rpDries');
+    const tIn = $('#rpType'), vIn = $('#rpVal'), taxIn = $('#rpTax');
+    const priceIn = $('#rpPrice'), fileIn = $('#rpFile');
+    const result = $('#rpResult'), history = $('#rpHistory'), saveBtn = $('#rpSaveBtn'), valLabel = $('#rpValLabel');
+    if (!mIn) return;
+    // Default mês = mês passado
+    const lastMonth = new Date(); lastMonth.setMonth(lastMonth.getMonth()-1);
+    mIn.value = lastMonth.toISOString().slice(0,7);
+
+    const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    function calc() {
+      const w = +wIn.value || 0, d = +dIn.value || 0;
+      const cycles = w + d;
+      const type = tIn.value;
+      const val = +vIn.value || 0;
+      const tax = (+taxIn.value || 0) / 100;
+      const price = +priceIn.value || 0;
+      let repasseBruto = 0, formula = '';
+      if (type === 'fixed') {
+        repasseBruto = cycles * val;
+        formula = `${cycles} ciclos × ${money(val)} = ${money(repasseBruto)}`;
+      } else {
+        const receita = cycles * price;
+        repasseBruto = receita * (val/100);
+        formula = `${cycles} × ${money(price)} = ${money(receita)} × ${val}% = ${money(repasseBruto)}`;
+      }
+      const taxAmount = repasseBruto * tax;
+      const repasseLiq = repasseBruto - taxAmount;
+      const receita = cycles * price;
+      const lavandery = price > 0 ? receita - repasseBruto : null;
+      result.innerHTML = `
+        <div style="font-size:12px;color:var(--ink-600);margin-bottom:10px">${formula}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px">
+          <div style="padding:10px;background:#fff;border-radius:8px">
+            <div style="font-size:10px;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em">Repasse bruto</div>
+            <div style="font-size:16px;font-weight:700;color:var(--ink-900)">${money(repasseBruto)}</div>
+          </div>
+          <div style="padding:10px;background:#fff;border-radius:8px">
+            <div style="font-size:10px;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em">Imposto (${(tax*100).toFixed(2)}%)</div>
+            <div style="font-size:16px;font-weight:700;color:#ef4444">− ${money(taxAmount)}</div>
+          </div>
+          <div style="padding:10px;background:linear-gradient(135deg,#f6f3fa,#ebe3ff);border-radius:8px;grid-column:1/-1">
+            <div style="font-size:10px;color:var(--brand-700);text-transform:uppercase;letter-spacing:.05em;font-weight:600">💸 Repasse líquido ao condomínio</div>
+            <div style="font-size:22px;font-weight:700;color:var(--brand-700)">${money(repasseLiq)}</div>
+          </div>
+          ${lavandery != null ? `
+          <div style="padding:10px;background:#fff;border-radius:8px;grid-column:1/-1">
+            <div style="font-size:10px;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em">Receita máquina</div>
+            <div style="font-size:14px;color:var(--ink-700)">${money(receita)} = ${cycles} × ${money(price)}</div>
+            <div style="margin-top:6px;font-size:10px;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em">🏦 Líquido Lavandery</div>
+            <div style="font-size:18px;font-weight:700;color:#10b981">${money(lavandery)}</div>
+          </div>` : ''}
+        </div>`;
+    }
+    [wIn, dIn, tIn, vIn, taxIn, priceIn].forEach(el => el.addEventListener('input', calc));
+    tIn.addEventListener('change', () => { valLabel.textContent = tIn.value === 'fixed' ? 'Valor (R$/ciclo)' : 'Percentual (%)'; calc(); });
+    calc();
+
+    // Salvar
+    saveBtn.addEventListener('click', async () => {
+      const month = mIn.value;
+      if (!month) { toast('Escolha o mês'); return; }
+      const w = +wIn.value || 0, d = +dIn.value || 0;
+      if (w + d === 0) { toast('Informe os ciclos'); return; }
+      const body = {
+        month, washes: w, dries: d,
+        type: tIn.value, value: +vIn.value || 0,
+        tax: +taxIn.value || 0, price: +priceIn.value || 0,
+      };
+      // Anexo (base64 se pequeno)
+      const f = fileIn.files?.[0];
+      if (f && f.size < 4_000_000) {
+        body.attachment = await new Promise(res => { const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f); });
+        body.attachment_name = f.name;
+      }
+      saveBtn.disabled = true; saveBtn.textContent = 'Salvando...';
+      try {
+        const r = await fetch('/api/condominiums/'+c.id+'/repasse', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const res = await r.json();
+        if (!r.ok) throw new Error(res.detail || res.error);
+        toast('✓ Repasse salvo');
+        loadHistory();
+      } catch (e) { alert('Erro: ' + e.message); }
+      saveBtn.disabled = false; saveBtn.textContent = '💾 Salvar repasse do mês';
+    });
+
+    async function loadHistory() {
+      try {
+        const rows = await fetch('/api/condominiums/'+c.id+'/repasse').then(r=>r.ok?r.json():[]);
+        if (!rows.length) { history.innerHTML = '<div class="text-xs text-gray-400">Nenhum repasse registrado ainda.</div>'; return; }
+        history.innerHTML = `<div style="font-weight:600;margin-bottom:6px;color:var(--ink-700)">Histórico (${rows.length})</div>` +
+          rows.map(r => `
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ink-100)">
+              <div><b>${r.month}</b> · ${r.washes}L + ${r.dries}S = ${(r.washes||0)+(r.dries||0)} ciclos · ${r.type==='fixed'?money(r.value)+'/ciclo':r.value+'%'}</div>
+              <div><b style="color:var(--brand-700)">${money(r.repasse_liquido)}</b>${r.attachment_url?` · <a href="${r.attachment_url}" target="_blank">📎</a>`:''}</div>
+            </div>`).join('');
+      } catch {}
+    }
+    loadHistory();
+  })();
+
   drawer.querySelector('#addMachineBtn').addEventListener('click', async () => {
     const code = prompt('Código (ex: LVD-003):') || '';
     await fetch('/api/condominiums/'+c.id+'/machines', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code, type:'Lavadora' }) });

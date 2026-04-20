@@ -1644,6 +1644,97 @@ CREATE TABLE IF NOT EXISTS ticket_photos (
 );
 CREATE INDEX IF NOT EXISTS idx_tp_ticket ON ticket_photos(ticket_id);`);
 
+// ---------- Repasse por condomínio (módulo mensal) ----------
+db.exec(`CREATE TABLE IF NOT EXISTS condo_repasse (
+  id TEXT PRIMARY KEY,
+  condo_id TEXT REFERENCES condominiums(id) ON DELETE CASCADE,
+  month TEXT NOT NULL,
+  washes INTEGER DEFAULT 0,
+  dries INTEGER DEFAULT 0,
+  cycles INTEGER,
+  type TEXT,
+  value REAL,
+  tax_pct REAL,
+  price REAL,
+  receita_maquina REAL,
+  repasse_bruto REAL,
+  imposto REAL,
+  repasse_liquido REAL,
+  liquido_lavandery REAL,
+  attachment_url TEXT,
+  attachment_name TEXT,
+  created_at INTEGER DEFAULT (strftime('%s','now')*1000),
+  updated_at INTEGER DEFAULT (strftime('%s','now')*1000),
+  UNIQUE(condo_id, month)
+);
+CREATE INDEX IF NOT EXISTS idx_cr_condo ON condo_repasse(condo_id);`);
+
+app.get('/api/condominiums/:id/repasse', (req, res) => {
+  if (!req.user) return res.status(401).json({ error:'unauthorized' });
+  const rows = db.prepare('SELECT * FROM condo_repasse WHERE condo_id=? ORDER BY month DESC').all(req.params.id);
+  res.json(rows);
+});
+app.post('/api/condominiums/:id/repasse', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const b = req.body || {};
+  if (!b.month) return res.status(400).json({ error:'missing_month' });
+  const w = parseInt(b.washes)||0, d = parseInt(b.dries)||0;
+  const cycles = w + d;
+  const type = b.type || 'fixed';
+  const value = parseFloat(b.value)||0;
+  const tax_pct = parseFloat(b.tax)||0;
+  const price = parseFloat(b.price)||0;
+  const receita = cycles * price;
+  let repasse_bruto = 0;
+  if (type === 'fixed') repasse_bruto = cycles * value;
+  else repasse_bruto = receita * (value/100);
+  const imposto = repasse_bruto * (tax_pct/100);
+  const repasse_liq = repasse_bruto - imposto;
+  const liq_lav = price > 0 ? receita - repasse_bruto : null;
+  const id = `rep_${req.params.id}_${b.month}`;
+  let attUrl = null, attName = null;
+  if (b.attachment && b.attachment.startsWith('data:') && b.attachment.length < 6_000_000) {
+    try {
+      const dir = path.join(__dirname, '..', 'uploads', 'repasse');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const ext = (b.attachment_name||'anexo').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,5) || 'bin';
+      const fname = `${id}_${Date.now()}.${ext}`;
+      const data = Buffer.from(b.attachment.split(',')[1], 'base64');
+      fs.writeFileSync(path.join(dir, fname), data);
+      attUrl = `/uploads/repasse/${fname}`;
+      attName = b.attachment_name || fname;
+    } catch(e) { console.error('attachment save fail', e); }
+  }
+  db.prepare(`INSERT INTO condo_repasse
+    (id,condo_id,month,washes,dries,cycles,type,value,tax_pct,price,receita_maquina,repasse_bruto,imposto,repasse_liquido,liquido_lavandery,attachment_url,attachment_name,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(condo_id,month) DO UPDATE SET
+      washes=excluded.washes, dries=excluded.dries, cycles=excluded.cycles, type=excluded.type,
+      value=excluded.value, tax_pct=excluded.tax_pct, price=excluded.price,
+      receita_maquina=excluded.receita_maquina, repasse_bruto=excluded.repasse_bruto,
+      imposto=excluded.imposto, repasse_liquido=excluded.repasse_liquido,
+      liquido_lavandery=excluded.liquido_lavandery,
+      attachment_url=COALESCE(excluded.attachment_url, condo_repasse.attachment_url),
+      attachment_name=COALESCE(excluded.attachment_name, condo_repasse.attachment_name),
+      updated_at=?`)
+    .run(id, req.params.id, b.month, w, d, cycles, type, value, tax_pct, price, receita, repasse_bruto, imposto, repasse_liq, liq_lav, attUrl, attName, Date.now(), Date.now());
+  db.prepare(`INSERT INTO condo_payments (id,condo_id,period,type,amount,reference,note)
+    VALUES (?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET amount=excluded.amount, note=excluded.note, reference=excluded.reference`)
+    .run(`pay_${id}`, req.params.id, b.month, 'repasse', repasse_liq,
+      type==='fixed' ? `R$ ${value.toFixed(2)}/ciclo` : `${value}% sobre receita`,
+      `${cycles} ciclos (${w} lav + ${d} sec) · Repasse bruto R$ ${repasse_bruto.toFixed(2)} · Imposto ${tax_pct}% · Repasse líquido`);
+  if (type === 'fixed' && value > 0) db.prepare('UPDATE condominiums SET cycle_rate=? WHERE id=?').run(value, req.params.id);
+  if (price > 0) db.prepare('UPDATE condominiums SET cycle_price=? WHERE id=?').run(price, req.params.id);
+  if (tax_pct > 0) db.prepare('UPDATE condominiums SET tax_rate=? WHERE id=?').run(tax_pct, req.params.id);
+  res.json({ ok:true, id, receita, repasse_bruto, imposto, repasse_liquido: repasse_liq, liquido_lavandery: liq_lav });
+});
+app.delete('/api/condominiums/:id/repasse/:month', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  db.prepare('DELETE FROM condo_repasse WHERE condo_id=? AND month=?').run(req.params.id, req.params.month);
+  res.json({ ok:true });
+});
+
 // Helpers
 function requireCondo(req, res) {
   if (!req.user || req.user.role !== 'condo' || !req.user.condo_id) {
