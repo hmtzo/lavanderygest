@@ -285,6 +285,8 @@
     </div>
     <div class="flex items-center gap-2">
       <input id="condoSearch" class="input" placeholder="Buscar..." style="max-width:280px"/>
+      <button id="upperCondosBtn" class="btn-new ghost sm" title="Padronizar todos em MAIÚSCULAS">🔠 UPPERCASE</button>
+      <button id="cleanupCondosBtn" class="btn-new ghost sm" title="Remove registros que não são condomínios">🧹 Limpar não-condos</button>
       <button id="newCondoBtn" class="btn btn-primary" style="width:auto;padding:0 20px">+ Novo</button>
     </div>
   </div>
@@ -2552,10 +2554,32 @@ document.querySelector('#condoSearch')?.addEventListener('input', renderCondos);
 document.querySelector('#newCondoBtn')?.addEventListener('click', async () => {
   const name = prompt('Nome do condomínio:');
   if (!name) return;
-  const r = await fetch('/api/condominiums', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+  const r = await fetch('/api/condominiums', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: name.toUpperCase() }) });
   const d = await r.json();
   loadCondos();
   openCondoDrawer(d.id);
+});
+
+// Padronizar todos em maiúsculo
+document.querySelector('#upperCondosBtn')?.addEventListener('click', async () => {
+  if (!confirm('Padronizar todos os nomes de condomínios em MAIÚSCULAS?')) return;
+  const r = await fetch('/api/condominiums/uppercase-all', { method:'POST' });
+  const d = await r.json();
+  if (r.ok) { Toast.success(`${d.updated} nomes padronizados`); loadCondos(); }
+  else Toast.error('Erro');
+});
+
+// Limpar não-condomínios
+document.querySelector('#cleanupCondosBtn')?.addEventListener('click', async () => {
+  // Primeiro preview
+  if (!confirm('Vai remover do sistema todos os registros que não parecem ser condomínios (ex: "Ferias Coletivas", contratos de serviço etc). Continuar?')) return;
+  const r = await fetch('/api/condominiums/cleanup-non-condos', { method:'POST' });
+  const d = await r.json();
+  if (r.ok) {
+    Toast.success(`${d.removed} registros removidos · ${d.kept} condomínios mantidos`);
+    console.log('Removidos:', d.removedNames);
+    loadCondos();
+  } else Toast.error('Erro');
 });
 
 // ---------- Schedule ----------

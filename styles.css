@@ -120,8 +120,11 @@ h1,h2,h3 { letter-spacing: -0.02em; }
 /* Modal & drawer */
 .overlay { position: fixed; inset: 0; background: rgba(17,24,39,.35); backdrop-filter: blur(4px); z-index: 80; opacity: 0; transition: opacity .2s; pointer-events:none; }
 .overlay.show { opacity: 1; pointer-events: all; }
-.drawer { position: fixed; top:0; right:0; bottom:0; width: min(560px, 92vw); background:#fff; box-shadow: -16px 0 40px rgba(17,24,39,.12); transform: translateX(100%); transition: transform .25s cubic-bezier(.2,.7,.2,1); z-index: 90; overflow-y:auto; }
+.drawer { position: fixed; top:0; right:0; bottom:0; width: min(760px, 96vw); background:#fff; box-shadow: -16px 0 40px rgba(17,24,39,.12); transform: translateX(100%); transition: transform .25s cubic-bezier(.2,.7,.2,1); z-index: 90; overflow-y:auto; }
 .drawer.show { transform: translateX(0); }
+/* Condomínio em modo página (quase full-screen) */
+#condoDrawer { width: min(1100px, 98vw); }
+#condoDrawer .drawer-body { padding: 28px 40px; }
 .drawer-header { position:sticky; top:0; background: rgba(255,255,255,.95); backdrop-filter: blur(14px); border-bottom: 1px solid #F1F2F4; padding: 16px 20px; display:flex; align-items:center; justify-content:space-between; z-index: 1; }
 .drawer-body { padding: 20px; }
 .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -48%); width: min(560px, 92vw); background:#fff; border-radius: 18px; box-shadow: 0 40px 80px rgba(17,24,39,.2); z-index: 90; opacity: 0; transition: opacity .2s, transform .2s; pointer-events:none; max-height:90vh; overflow:auto; }

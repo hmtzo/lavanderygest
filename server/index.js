@@ -133,6 +133,31 @@ app.get('/api/condominiums', (_,res) => {
   })));
 });
 
+// Padroniza todos os nomes em MAIÚSCULAS
+app.post('/api/condominiums/uppercase-all', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const r = db.prepare("UPDATE condominiums SET name = UPPER(name) WHERE name != UPPER(name)").run();
+  res.json({ ok: true, updated: r.changes });
+});
+
+// Remove registros que não são condomínios (lixo do Autentique)
+app.post('/api/condominiums/cleanup-non-condos', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  // Marca como condo válido: nome contém CONDOMÍNIO, EDIFÍCIO, RESIDENCIAL, CONJUNTO, HABITAT
+  // Remove: "Ferias Coletivas", "Registrobr", "Contrato Gestão", "Contrato Lavandery" (contratos duplicados sem condo claro), etc.
+  const all = db.prepare('SELECT id, name FROM condominiums').all();
+  const isCondo = n => {
+    const s = String(n||'').toUpperCase();
+    const hasCondoWord = /CONDOM[ÍI]NIO|EDIF[ÍI]CIO|RESIDENCIAL|EDILICIO|CONJUNTO|HABITAT|BRERA|VIBRA|VIVAZ|VIVABENX|METROCASA|THERA|SAMPA|TERRA[ÇC]O|ATLANT|SKY|URBAN|FOR\s+LIFE|RAIZES|RAI[ZS]ES|NYC|NOW|BENX|VIEW|PORTO|PIAZZA|STATION|STUDIO|MAX\s|MOOV|ARIZONA|TURIASSU|UPPER|ALL\s+LIBER|BORGES|CUPE[CÇ]|VILL[AE]|PARK|HOUSE|HOUX|HELLO|FLOR|JARDIM|JARDINS|SALE|HOME|GAMELINHA|MUNDO\s+APTO|VN\s+|SIDE|CYRELA|DNA|AMBIENCE|COMPOSITE|INNOVA|MISTRAL|NEX\s+ONE|MOEMA|ALPHAVIEW|BOM\s+FIM|DONA\s+LINDU|GRAVURA|APLAUSO|EXALT|IBIRAPUERA|CAMINHO|STAR|VIVART|VINTAGE|FAMILIA|FAM[IÍ]LIA|DOT|UPTOWN|DOMUS|TANGAR[ÁA]|ASSUMIR[ÁA]|PAULICEIA|GOLDEN|MASTINS|INDUSTRIAL|JARDINS|ESPLANADA|PALACETE|CAMBUCY|CAMBUCI|PORTINARI|ALEGRO|LOOK|CURSINO|PERDIZES|CUNHA|ZOOM|CIDADE|OLIMPIA|GUILHERMINA|VIVA|LUMIS|WELCONX|MARRQCOS|TUCUNA|DA\s+S[ÉE]|ANDORINHAS|JURITIS|SIX\s+SANTA|MERCHTE|SUBCONDOMINIO|CLUBE|STUDIOS|KONECT|SPAZIO|METRO\s+CASA|SAINT|TSS|DECIDA|MAX\s+CARNEIROS|COMODATO/i.test(s);
+    const isJunk = /FERIAS\s+COLETIVAS|REGISTRO\s*BR|REGISTROBR|TESTE\s+DE|CANCELAMENTO|APENAS\s+TESTE|PROPOSTA|SEM\s+CONTRATO|CONTRATO\s+CANCELADO|MINUTA|^-$|^\s*$/i.test(s);
+    return hasCondoWord && !isJunk;
+  };
+  const toRemove = all.filter(c => !isCondo(c.name));
+  const del = db.prepare('DELETE FROM condominiums WHERE id=?');
+  for (const c of toRemove) del.run(c.id);
+  res.json({ ok:true, removed: toRemove.length, kept: all.length - toRemove.length, removedNames: toRemove.map(c=>c.name) });
+});
+
 // Condomínios CRUD
 app.post('/api/condominiums', (req,res) => {
   const b = req.body || {};
