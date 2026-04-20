@@ -2785,10 +2785,20 @@ document.querySelector('#cpPdf')?.addEventListener('click', () => {
   window.open(`/api/condominiums/${_cpCondo.id}/repasse-report.pdf?year=${year}`, '_blank');
 });
 
-// ---------- MOSKIT CRM (aba dedicada) ----------
+// ---------- MOSKIT CRM (aba dedicada) + auto-refresh ----------
 let _mkView = 'companies';
+let _mkAutoTimer = null;
+
+function _mkAgoText(ts) {
+  if (!ts) return 'nunca sincronizado';
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60) return `há ${s}s`;
+  if (s < 3600) return `há ${Math.round(s/60)}min`;
+  if (s < 86400) return `há ${Math.round(s/3600)}h`;
+  return new Date(ts).toLocaleString('pt-BR');
+}
+
 async function loadMoskit() {
-  // KPIs
   try {
     const s = await fetch('/api/moskit/stats').then(r => r.ok?r.json():null);
     if (!s) { document.querySelector('#mkKpis').innerHTML = '<div class="card-new" style="padding:20px"><p>⚠ API key não configurada. Vá em <b>Integrações → Moskit CRM</b>.</p></div>'; return; }
@@ -2799,38 +2809,41 @@ async function loadMoskit() {
       ['Atividades', s.activities||'—', '#F59E0B'],
       ['Usuários', s.users||'—', '#3B82F6'],
     ];
-    document.querySelector('#mkKpis').innerHTML = items.map(([l,v,c]) => `
+    const syncBadge = `<div style="font-size:11px;color:var(--ink-500);margin-bottom:10px">🔄 Última sincronização: <b id="mkLastSync">${_mkAgoText(s.synced_at)}</b> · atualiza sozinho a cada 30min</div>`;
+    document.querySelector('#mkKpis').innerHTML = syncBadge + '<div class="grid-cards">' + items.map(([l,v,c]) => `
       <div class="stat-card" style="--accent:${c}">
         <div class="stat-label">${l}</div>
         <div class="stat-value mini">${v}</div>
         <div class="stat-sub">no Moskit</div>
-      </div>`).join('');
+      </div>`).join('') + '</div>';
   } catch (e) {
     document.querySelector('#mkKpis').innerHTML = '<div class="card-new" style="padding:20px"><p style="color:#dc2626">Erro: '+esc(e.message)+'</p></div>';
   }
   loadMkView(_mkView);
+  // Auto-refresh a cada 60s enquanto estiver na aba
+  if (_mkAutoTimer) clearInterval(_mkAutoTimer);
+  _mkAutoTimer = setInterval(() => {
+    if (!document.querySelector('#moskitMain')?.classList.contains('hidden')) {
+      loadMoskit();
+    } else {
+      clearInterval(_mkAutoTimer); _mkAutoTimer = null;
+    }
+  }, 60_000);
 }
 
 async function loadMkView(view) {
   _mkView = view;
   document.querySelectorAll('.mkTab').forEach(t => t.classList.toggle('active', t.dataset.mkview === view));
   const host = document.querySelector('#mkView');
-  host.innerHTML = '<div class="card-new" style="padding:40px;text-align:center;color:var(--ink-500)">⏳ Carregando...</div>';
   try {
-    const url = {
-      companies: '/api/moskit/companies',
-      contacts: '/api/moskit/contacts',
-      deals: '/api/moskit/deals',
-      activities: '/api/moskit/activities',
-      pipelines: '/api/moskit/pipelines',
-      users: '/api/moskit/users',
-    }[view];
-    const data = await fetch(url).then(r => r.ok?r.json():[]);
-    if (!Array.isArray(data) || !data.length) {
-      host.innerHTML = '<div class="card-new" style="padding:40px;text-align:center;color:var(--ink-400)">Nenhum registro encontrado no Moskit.</div>';
+    const url = `/api/moskit/${view}`;
+    const r = await fetch(url).then(r => r.ok?r.json():{});
+    const rows = Array.isArray(r.data) ? r.data : [];
+    if (!rows.length) {
+      host.innerHTML = '<div class="card-new" style="padding:40px;text-align:center;color:var(--ink-400)">Nenhum registro (ou aguardando primeira sincronização)<br><small>Última tentativa: ' + _mkAgoText(r.synced_at) + (r.error ? ' · ' + esc(r.error) : '') + '</small></div>';
       return;
     }
-    host.innerHTML = renderMkList(view, data);
+    host.innerHTML = renderMkList(view, rows);
   } catch (e) {
     host.innerHTML = '<div class="card-new" style="padding:20px;color:#dc2626">Erro: ' + esc(e.message) + '</div>';
   }
@@ -2895,7 +2908,16 @@ document.addEventListener('input', e => {
     document.querySelectorAll('.mkRow').forEach(r => r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none');
   }
 });
-document.querySelector('#mkReload')?.addEventListener('click', loadMoskit);
+document.querySelector('#mkReload')?.addEventListener('click', async () => {
+  const btn = document.querySelector('#mkReload'); const orig = btn.textContent;
+  btn.textContent = '⏳ Sincronizando...'; btn.disabled = true;
+  try {
+    await fetch('/api/moskit/refresh', { method: 'POST' });
+    Toast.success('Sincronização concluída');
+    await loadMoskit();
+  } catch (e) { Toast.error('Erro: ' + e.message); }
+  btn.textContent = orig; btn.disabled = false;
+});
 
 // ---------- Aba REPASSES (dedicada) ----------
 let _rpPageCondos = [];

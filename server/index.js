@@ -3185,55 +3185,100 @@ app.post('/api/integrations/s3/test', async (_req, res) => {
 });
 
 // ---------- Moskit CRM ----------
+// Cache server-side atualizado automaticamente a cada 30min
+db.exec(`CREATE TABLE IF NOT EXISTS moskit_cache (
+  kind TEXT PRIMARY KEY,
+  data TEXT,
+  synced_at INTEGER,
+  error TEXT
+);`);
+
+async function moskitRefreshCache() {
+  const cfg = getIntegration('moskit');
+  if (!cfg?.api_key) return;
+  const now = Date.now();
+  const upsert = db.prepare('INSERT INTO moskit_cache (kind,data,synced_at,error) VALUES (?,?,?,?) ON CONFLICT(kind) DO UPDATE SET data=excluded.data, synced_at=excluded.synced_at, error=excluded.error');
+  const kinds = [
+    ['companies', () => moskitListCompanies(cfg, { limit: 500 })],
+    ['contacts', () => moskitListContacts(cfg, { limit: 500 })],
+    ['deals', () => moskitListDeals(cfg, { limit: 500 })],
+    ['activities', () => moskitListActivities(cfg, { limit: 500 })],
+    ['pipelines', () => moskitListPipelines(cfg)],
+    ['users', () => moskitListUsers(cfg)],
+  ];
+  for (const [kind, fn] of kinds) {
+    try {
+      const data = await fn();
+      upsert.run(kind, JSON.stringify(data), now, null);
+      await new Promise(r => setTimeout(r, 150));
+    } catch (e) {
+      upsert.run(kind, null, now, String(e.message || e));
+    }
+  }
+}
+function moskitCacheGet(kind) {
+  const row = db.prepare('SELECT data, synced_at, error FROM moskit_cache WHERE kind=?').get(kind);
+  if (!row) return { data: null, synced_at: null, error: 'not_synced' };
+  return { data: row.data ? JSON.parse(row.data) : null, synced_at: row.synced_at, error: row.error };
+}
+// Agenda refresh a cada 30min (produção) ou 5min (dev)
+const MOSKIT_INTERVAL = (process.env.NODE_ENV === 'production' ? 30 : 5) * 60_000;
+setInterval(() => moskitRefreshCache().catch(e => console.error('[moskit-cron]', e.message)), MOSKIT_INTERVAL);
+// Refresh inicial 5s após start (dá tempo do DB subir)
+setTimeout(() => moskitRefreshCache().catch(() => {}), 5000);
+
 app.post('/api/integrations/moskit/test', async (_req, res) => {
   const cfg = getIntegration('moskit');
-  res.json(await moskitTest(cfg));
+  const r = await moskitTest(cfg);
+  if (r.ok) moskitRefreshCache().catch(() => {}); // dispara refresh ao salvar
+  res.json(r);
 });
 
-app.get('/api/moskit/companies', async (req, res) => {
+// Força sincronização manual
+app.post('/api/moskit/refresh', async (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   try {
-    const r = await moskitListCompanies(getIntegration('moskit'), { limit: parseInt(req.query.limit||'100'), offset: parseInt(req.query.offset||'0') });
-    res.json(r);
+    await moskitRefreshCache();
+    res.json({ ok: true, synced_at: Date.now() });
   } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
 });
 
-app.get('/api/moskit/pipelines', async (req, res) => {
-  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
-  try { res.json(await moskitListPipelines(getIntegration('moskit'))); }
-  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
-});
+// Helper: responde com cache (rápido) e agenda refresh se cache velho (stale-while-revalidate)
+function cacheHandler(kind) {
+  return (req, res) => {
+    if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+    const cached = moskitCacheGet(kind);
+    // Se cache tem >30min, dispara refresh em background
+    if (cached.synced_at && (Date.now() - cached.synced_at) > 30*60_000) {
+      moskitRefreshCache().catch(() => {});
+    }
+    res.json({
+      data: cached.data,
+      synced_at: cached.synced_at,
+      error: cached.error,
+      stale: cached.synced_at ? (Date.now() - cached.synced_at) > 5*60_000 : true,
+    });
+  };
+}
 
-app.get('/api/moskit/stats', async (req, res) => {
-  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
-  try { res.json(await moskitStats(getIntegration('moskit'))); }
-  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
-});
+app.get('/api/moskit/companies', cacheHandler('companies'));
+app.get('/api/moskit/contacts', cacheHandler('contacts'));
+app.get('/api/moskit/deals', cacheHandler('deals'));
+app.get('/api/moskit/activities', cacheHandler('activities'));
+app.get('/api/moskit/pipelines', cacheHandler('pipelines'));
+app.get('/api/moskit/users', cacheHandler('users'));
 
-app.get('/api/moskit/contacts', async (req, res) => {
+app.get('/api/moskit/stats', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
-  try { res.json(await moskitListContacts(getIntegration('moskit'), { limit: parseInt(req.query.limit||'100') })); }
-  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
-});
-
-app.get('/api/moskit/activities', async (req, res) => {
-  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
-  try { res.json(await moskitListActivities(getIntegration('moskit'), { limit: parseInt(req.query.limit||'100') })); }
-  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
-});
-
-app.get('/api/moskit/users', async (req, res) => {
-  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
-  try { res.json(await moskitListUsers(getIntegration('moskit'))); }
-  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
-});
-
-app.get('/api/moskit/deals', async (req, res) => {
-  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
-  try {
-    const r = await moskitListDeals(getIntegration('moskit'), { limit: parseInt(req.query.limit||'100') });
-    res.json(r);
-  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+  const stats = {
+    companies: moskitCacheGet('companies').data?.length || 0,
+    contacts: moskitCacheGet('contacts').data?.length || 0,
+    deals: moskitCacheGet('deals').data?.length || 0,
+    activities: moskitCacheGet('activities').data?.length || 0,
+    users: moskitCacheGet('users').data?.length || 0,
+    synced_at: moskitCacheGet('companies').synced_at,
+  };
+  res.json(stats);
 });
 
 // Sincroniza 1 condomínio como empresa no Moskit
