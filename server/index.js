@@ -2096,7 +2096,7 @@ app.get('/api/repasses/report.pdf', async (req, res) => {
   }
 });
 
-// Relatório mensal individual por condomínio (formato For Consolação)
+// Relatório mensal individual por condomínio (formato detalhado)
 app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
   if (!req.user || !['admin','gestor','condo'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   const cid = req.user.role === 'condo' ? req.user.condo_id : req.params.id;
@@ -2107,54 +2107,37 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
   const r = db.prepare('SELECT * FROM condo_repasse WHERE condo_id=? AND month=?').get(cid, month);
   if (!r) return res.status(404).json({ error:'no_repasse_for_month' });
 
+  // Dados pra comparação: mês anterior
+  const prevDate = new Date(month + '-01'); prevDate.setMonth(prevDate.getMonth() - 1);
+  const prevMonth = prevDate.toISOString().slice(0,7);
+  const prev = db.prepare('SELECT * FROM condo_repasse WHERE condo_id=? AND month=?').get(cid, prevMonth);
+  // Média dos últimos 6 meses
+  const history = db.prepare(`SELECT * FROM condo_repasse WHERE condo_id=? AND month < ? ORDER BY month DESC LIMIT 6`).all(cid, month);
+  const avg6m = history.length ? history.reduce((s,h)=>s+(h.repasse_liquido||0),0)/history.length : 0;
+  const avgCycles = history.length ? Math.round(history.reduce((s,h)=>s+(h.cycles||0),0)/history.length) : 0;
+
   try {
     const { default: jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const W = 595, H = 842, pad = 40;
     const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const pct = (cur, prev) => prev ? (((cur-prev)/prev)*100).toFixed(1) + '%' : '—';
     const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
     const [y, mo] = month.split('-');
     const mesNome = meses[parseInt(mo,10)-1];
+    const prevMesNome = prev ? meses[parseInt(prevMonth.split('-')[1],10)-1] : null;
 
-    // Header Lavandery
-    doc.setFillColor(83, 60, 157); doc.rect(0, 0, W, 80, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(22);
-    doc.text('LAVANDERY', pad, 45);
-    doc.setFont('helvetica','normal'); doc.setFontSize(11);
-    doc.text(`Relatório Mensal de Repasse · ${mesNome}/${y}`, pad, 62);
-
-    // Condomínio
-    doc.setTextColor(30);
-    doc.setFont('helvetica','bold'); doc.setFontSize(16);
-    doc.text((condo.name||'').toUpperCase(), pad, 115);
-    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(100);
-    if (condo.address) doc.text(condo.address, pad, 131);
-    if (condo.cnpj) doc.text(`CNPJ: ${condo.cnpj}`, pad, 145);
-
-    doc.setDrawColor(200); doc.line(pad, 165, W-pad, 165);
-
-    // Resumo estilo For Consolação
-    let yy = 195;
-    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(30);
-    doc.text('RESUMO DO MÊS', pad, yy); yy += 22;
-
-    const cycles = r.cycles || ((r.washes||0) + (r.dries||0));
-    const unitRate = r.type === 'fixed' ? r.value : (r.price > 0 ? (r.value/100 * r.price) : 0);
-    const washValue = (r.washes||0) * unitRate;
-    const dryValue = (r.dries||0) * unitRate;
-
-    const rows = [
-      ['TOTAL DE CICLOS LAVAGEM', r.washes||0, money(washValue)],
-      ['TOTAL DE CICLOS SECAGEM', r.dries||0, money(dryValue)],
-      [r.type==='fixed' ? 'REEMBOLSO POR CICLO' : `REPASSE (% sobre ${money(r.price)}/ciclo)`, '', r.type==='fixed' ? money(r.value) : r.value + '%'],
-      ['VALOR BRUTO CICLOS', '', money(r.repasse_bruto)],
-      ['ICMS, PIS, COFINS, ISS, TAXA DE CARTÃO', `${r.tax_pct||0}%`, money(r.imposto)],
-      ['TOTAL REPASSE', '', money(r.repasse_liquido)],
-    ];
-
-    doc.setFontSize(10);
-    for (const [label, qty, val] of rows) {
-      const isTotal = label === 'TOTAL REPASSE' || label === 'VALOR BRUTO CICLOS';
+    function checkPage(yCur, need=80) {
+      if (yCur + need > H - 60) { doc.addPage(); return 50; }
+      return yCur;
+    }
+    function sectionTitle(text, yy) {
+      doc.setFillColor(83,60,157); doc.rect(pad-4, yy-14, 3, 18, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(30);
+      doc.text(text.toUpperCase(), pad+8, yy);
+      return yy + 22;
+    }
+    function tableRow(yy, label, qty, val, isTotal) {
       if (isTotal) {
         doc.setFillColor(245,240,255);
         doc.rect(pad-4, yy-12, W-2*pad+8, 22, 'F');
@@ -2163,36 +2146,163 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
         doc.setFont('helvetica','normal'); doc.setTextColor(60);
       }
       doc.text(label, pad, yy);
-      if (qty !== '') doc.text(String(qty), 340, yy, { align: 'right' });
+      if (qty !== '' && qty != null) doc.text(String(qty), 340, yy, { align: 'right' });
       doc.text(val, W-pad, yy, { align: 'right' });
-      yy += 22;
+      return yy + 22;
+    }
+    function paragraph(text, yy, opts={}) {
+      doc.setFont(opts.italic?'helvetica':'helvetica', opts.italic?'italic':'normal');
+      doc.setFontSize(opts.size||10); doc.setTextColor(opts.color||80);
+      const lines = doc.splitTextToSize(text, W - 2*pad);
+      doc.text(lines, pad, yy);
+      return yy + lines.length * 14 + 6;
     }
 
-    // Bloco de texto descritivo
-    yy += 10;
-    doc.setFont('helvetica','italic'); doc.setFontSize(10); doc.setTextColor(80);
-    const descText = `Durante o mês de ${mesNome}/${y}, foram registrados ${cycles} ciclos (${r.washes||0} lavagens + ${r.dries||0} secagens). Após a aplicação de impostos e taxas (${r.tax_pct||0}% sobre o valor bruto), totalizando ${money(r.imposto)}, o valor de repasse líquido ao condomínio é de ${money(r.repasse_liquido)}.`;
-    const descLines = doc.splitTextToSize(descText, W - 2*pad);
-    doc.text(descLines, pad, yy);
-    yy += descLines.length * 14 + 20;
+    // ============== PÁGINA 1 ==============
+    // Header Lavandery
+    doc.setFillColor(83, 60, 157); doc.rect(0, 0, W, 90, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(24);
+    doc.text('LAVANDERY', pad, 40);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
+    doc.text('Lavanderia compartilhada inteligente', pad, 56);
+    doc.setFontSize(12); doc.setFont('helvetica','bold');
+    doc.text(`Relatório Mensal de Repasse`, pad, 76);
+    doc.setFont('helvetica','normal'); doc.setFontSize(13);
+    doc.text(`${mesNome} / ${y}`, W-pad, 76, { align: 'right' });
 
-    // Dados bancários (se houver)
+    // Bloco do condomínio
+    doc.setTextColor(30);
+    doc.setFont('helvetica','bold'); doc.setFontSize(17);
+    doc.text((condo.name||'').toUpperCase(), pad, 125);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(100);
+    let yHead = 143;
+    if (condo.address) { doc.text(condo.address, pad, yHead); yHead += 14; }
+    if (condo.city || condo.cep) { doc.text([condo.city, condo.cep].filter(Boolean).join(' · '), pad, yHead); yHead += 14; }
+    if (condo.cnpj) { doc.text(`CNPJ: ${condo.cnpj}`, pad, yHead); yHead += 14; }
+    doc.setDrawColor(220); doc.line(pad, yHead+4, W-pad, yHead+4);
+
+    let yy = yHead + 22;
+    // --- Intro ---
+    yy = paragraph(
+      `Prezado síndico/administrador, apresentamos abaixo o relatório detalhado dos serviços de lavanderia compartilhada prestados neste condomínio durante o mês de ${mesNome} de ${y}. Este documento contém a contabilização completa de ciclos realizados, cálculo do repasse devido ao condomínio, dedução de impostos e taxas, e as instruções para recebimento.`,
+      yy, { italic: true, color: 90 }
+    );
+    yy += 8;
+
+    // --- RESUMO OPERACIONAL ---
+    yy = sectionTitle('1. Resumo Operacional', yy);
+    const cycles = r.cycles || ((r.washes||0) + (r.dries||0));
+    const unitRate = r.type === 'fixed' ? r.value : (r.price > 0 ? (r.value/100 * r.price) : 0);
+    const washValue = (r.washes||0) * unitRate;
+    const dryValue = (r.dries||0) * unitRate;
+
+    yy = tableRow(yy, 'Total de ciclos de lavagem', r.washes||0, money(washValue));
+    yy = tableRow(yy, 'Total de ciclos de secagem', r.dries||0, money(dryValue));
+    yy = tableRow(yy, 'Total geral de ciclos', cycles, '');
+    yy = tableRow(yy, r.type==='fixed' ? 'Valor de repasse por ciclo' : `Percentual de repasse`, '', r.type==='fixed' ? money(r.value) : `${r.value}%`);
+    if (r.price) yy = tableRow(yy, 'Valor do ciclo cobrado do usuário', '', money(r.price));
+    yy += 8;
+
+    // --- MEMÓRIA DE CÁLCULO ---
+    yy = checkPage(yy, 160);
+    yy = sectionTitle('2. Memória de cálculo', yy);
+    yy = paragraph(
+      r.type === 'fixed'
+        ? `O valor bruto de repasse é calculado multiplicando-se o total de ciclos (${cycles}) pelo valor de reembolso por ciclo (${money(r.value)}), resultando em ${money(r.repasse_bruto)}.`
+        : `O valor bruto de repasse é calculado aplicando-se ${r.value}% sobre o faturamento bruto das máquinas (${cycles} ciclos × ${money(r.price)} = ${money(cycles * r.price)}), resultando em ${money(r.repasse_bruto)}.`,
+      yy, { color: 60 }
+    );
+    yy = paragraph(
+      `Sobre o valor bruto de repasse incide a alíquota de ${r.tax_pct||0}% (ICMS, PIS, COFINS, ISS e taxa de processamento de cartão), totalizando ${money(r.imposto)} em impostos e taxas deduzidas.`,
+      yy, { color: 60 }
+    );
+    yy = paragraph(
+      `Dessa forma, o valor líquido a ser repassado ao condomínio é de ${money(r.repasse_liquido)}.`,
+      yy, { color: 60 }
+    );
+    yy += 8;
+
+    // --- TABELA FINANCEIRA ---
+    yy = checkPage(yy, 180);
+    yy = sectionTitle('3. Composição financeira', yy);
+    yy = tableRow(yy, 'Valor bruto de repasse', '', money(r.repasse_bruto), true);
+    yy = tableRow(yy, `(–) Impostos e taxas (${r.tax_pct||0}%)`, '', money(r.imposto));
+    yy = tableRow(yy, '= TOTAL A REPASSAR AO CONDOMÍNIO', '', money(r.repasse_liquido), true);
+    yy += 10;
+
+    // --- COMPARATIVO ---
+    yy = checkPage(yy, 140);
+    yy = sectionTitle('4. Comparativo histórico', yy);
+    if (prev) {
+      yy = tableRow(yy, `Ciclos em ${prevMesNome}/${prevMonth.split('-')[0]}`, prev.cycles||0, money(prev.repasse_liquido));
+      const cyDelta = cycles - (prev.cycles||0);
+      const repDelta = (r.repasse_liquido||0) - (prev.repasse_liquido||0);
+      yy = tableRow(yy, 'Variação de ciclos', `${cyDelta>=0?'+':''}${cyDelta}`, pct(cycles, prev.cycles));
+      yy = tableRow(yy, 'Variação de repasse', `${repDelta>=0?'+':''}${money(repDelta)}`, pct(r.repasse_liquido, prev.repasse_liquido));
+    } else {
+      yy = paragraph('Este é o primeiro repasse registrado para este condomínio.', yy, { italic: true, color: 120 });
+    }
+    if (avg6m > 0) {
+      yy += 4;
+      yy = tableRow(yy, 'Média ciclos últimos 6 meses', avgCycles, money(avg6m));
+    }
+    yy += 8;
+
+    // --- EXPLICAÇÕES ---
+    yy = checkPage(yy, 220);
+    yy = sectionTitle('5. Entendendo seu relatório', yy);
+    yy = paragraph('• Ciclos de lavagem: cada vez que uma máquina lavadora roda um programa completo.', yy, { color: 60 });
+    yy = paragraph('• Ciclos de secagem: cada vez que uma máquina secadora roda um programa completo.', yy, { color: 60 });
+    yy = paragraph('• Valor bruto de repasse: valor total devido ao condomínio antes da dedução de impostos e taxas.', yy, { color: 60 });
+    yy = paragraph('• Impostos e taxas: incluem ICMS, PIS, COFINS, ISS e a taxa da operadora de cartão (pagamentos processados).', yy, { color: 60 });
+    yy = paragraph('• Total a repassar: valor líquido que será creditado na conta bancária indicada pelo condomínio.', yy, { color: 60 });
+    yy += 10;
+
+    // --- DADOS BANCÁRIOS ---
+    yy = checkPage(yy, 120);
     if (condo.bank_name || condo.bank_agency || condo.bank_account) {
       doc.setFillColor(246, 243, 250);
-      doc.roundedRect(pad, yy, W - 2*pad, 76, 8, 8, 'F');
-      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(83,60,157);
-      doc.text('DADOS PARA REPASSE', pad + 14, yy + 20);
-      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(50);
-      doc.text(`Banco: ${condo.bank_name||'—'}`, pad + 14, yy + 38);
-      doc.text(`Agência: ${condo.bank_agency||'—'}`, pad + 14, yy + 54);
-      doc.text(`Conta: ${condo.bank_account||'—'}`, pad + 14, yy + 70);
-      yy += 96;
+      doc.roundedRect(pad, yy, W - 2*pad, 96, 10, 10, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(83,60,157);
+      doc.text('💳 DADOS PARA O REPASSE', pad + 16, yy + 22);
+      doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(40);
+      doc.text(`Banco: ${condo.bank_name||'—'}`, pad + 16, yy + 42);
+      doc.text(`Agência: ${condo.bank_agency||'—'}`, pad + 16, yy + 58);
+      doc.text(`Conta: ${condo.bank_account||'—'}`, pad + 16, yy + 74);
+      doc.setFontSize(9); doc.setTextColor(120);
+      doc.text('O depósito será efetuado em até 10 dias úteis após a emissão deste relatório.', pad + 16, yy + 90);
+      yy += 110;
+    } else {
+      yy = paragraph('⚠ Dados bancários ainda não cadastrados. Entre em contato com a Lavandery para regularizar o recebimento do repasse.', yy, { color: 180, italic: true });
+      yy += 8;
     }
 
-    // Rodapé
-    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(150);
-    doc.text(`Lavandery — Inova Tecnologia e Serviços e Representação Ltda · CNPJ 45.061.358/0001-62`, pad, H - 40);
-    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, W - pad, H - 40, { align:'right' });
+    // --- OBSERVAÇÕES / CONTATO ---
+    yy = checkPage(yy, 120);
+    yy = sectionTitle('6. Dúvidas e contato', yy);
+    yy = paragraph('Em caso de qualquer divergência, dúvida sobre o cálculo ou necessidade de esclarecimento, entre em contato conosco pelos canais abaixo. Nossa equipe responderá em até 48 horas úteis.', yy, { color: 60 });
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(30);
+    doc.text('📧 financeiro@lavandery.com.br', pad, yy); yy += 14;
+    doc.text('📱 (11) 99999-9999 (WhatsApp)', pad, yy); yy += 14;
+    doc.text('🌐 lavandery.com.br', pad, yy); yy += 14;
+
+    // --- TERMO DE ACEITE ---
+    yy = checkPage(yy, 120);
+    yy += 10;
+    yy = sectionTitle('7. Validação', yy);
+    yy = paragraph('Este relatório foi gerado automaticamente pelo sistema Lavandery com base nos dados de utilização registrados nas máquinas do condomínio. Todos os valores foram calculados conforme contrato vigente entre as partes.', yy, { color: 80, italic: true });
+
+    // ============== RODAPÉ EM TODAS AS PÁGINAS ==============
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setDrawColor(230); doc.line(pad, H-50, W-pad, H-50);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(130);
+      doc.text(`LAVANDERY · INOVA TECNOLOGIA E SERVIÇOS E REPRESENTAÇÃO LTDA · CNPJ 45.061.358/0001-62`, pad, H-32);
+      doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} · Página ${i}/${pageCount}`, W-pad, H-32, { align:'right' });
+      doc.setTextColor(160); doc.setFontSize(7);
+      doc.text('Documento confidencial · uso exclusivo do CONTRATANTE', W/2, H-18, { align:'center' });
+    }
 
     const buf = Buffer.from(doc.output('arraybuffer'));
     res.setHeader('Content-Type', 'application/pdf');
