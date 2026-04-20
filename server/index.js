@@ -13,6 +13,7 @@ import { waStatus, waConnect, waDisconnect, waSendText, waAutoStart } from './wh
 import { gmapsTest, gmapsGeocode, gmapsRoute, s3Test, s3PresignUpload, s3PutObject, asaasTest, asaasCreateCustomer, asaasCreateCharge, asaasListCharges, sentryInit, sentryCapture, sentryTest } from './integrations-services.js';
 import { firebaseTest, firebaseUpload } from './firebase.js';
 import { driveTest, driveUpload } from './gdrive.js';
+import { moskitTest, moskitListCompanies, moskitUpsertCompany, moskitCreateDeal, moskitCreateActivity, moskitListPipelines, moskitListDeals } from './moskit.js';
 import { generateDeliveryReceipt, generateSurveyChecklist, generateInstallationReport, generateEquipmentDeliveryTerm } from './pdf-templates.js';
 import { setupAuth, authMiddleware, requireAuth, authRoutes, publicMiddleware, PUBLIC_PATHS } from './auth.js';
 import { fetchCalendars } from './calendar.js';
@@ -3181,6 +3182,92 @@ app.post('/api/integrations/firebase/test', async (_req, res) => {
 app.post('/api/integrations/s3/test', async (_req, res) => {
   const cfg = getIntegration('s3');
   res.json(await s3Test(cfg));
+});
+
+// ---------- Moskit CRM ----------
+app.post('/api/integrations/moskit/test', async (_req, res) => {
+  const cfg = getIntegration('moskit');
+  res.json(await moskitTest(cfg));
+});
+
+app.get('/api/moskit/companies', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const r = await moskitListCompanies(getIntegration('moskit'), { limit: parseInt(req.query.limit||'100'), offset: parseInt(req.query.offset||'0') });
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+app.get('/api/moskit/pipelines', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try { res.json(await moskitListPipelines(getIntegration('moskit'))); }
+  catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+app.get('/api/moskit/deals', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const r = await moskitListDeals(getIntegration('moskit'), { limit: parseInt(req.query.limit||'100') });
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+// Sincroniza 1 condomínio como empresa no Moskit
+app.post('/api/moskit/sync-condo/:id', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const c = db.prepare('SELECT * FROM condominiums WHERE id=?').get(req.params.id);
+    if (!c) return res.status(404).json({ error: 'condo_not_found' });
+    const r = await moskitUpsertCompany(getIntegration('moskit'), {
+      name: c.name, cnpj: c.cnpj, address: c.address, city: c.city, cep: c.cep,
+      email: c.contact_email,
+      notes: `Sincronizado do sistema Lavandery · ${c.washers||0}L + ${c.dryers||0}S · ${c.maintenance_label||''}`,
+    });
+    res.json({ ok: true, moskit: r });
+  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+// Sincroniza TODOS os condomínios
+app.post('/api/moskit/sync-all-condos', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const cfg = getIntegration('moskit');
+    const condos = db.prepare('SELECT * FROM condominiums WHERE is_contract=1').all();
+    let created = 0, updated = 0, failed = 0;
+    const errs = [];
+    for (const c of condos) {
+      try {
+        const r = await moskitUpsertCompany(cfg, {
+          name: c.name, cnpj: c.cnpj, address: c.address, city: c.city, cep: c.cep,
+          email: c.contact_email,
+          notes: `Sincronizado do sistema Lavandery · ${c.washers||0}L + ${c.dryers||0}S`,
+        });
+        if (r.__action === 'created') created++; else updated++;
+        await new Promise(r => setTimeout(r, 200)); // rate limit suave
+      } catch (e) { failed++; errs.push({ condo: c.name, error: String(e.message||e) }); }
+    }
+    res.json({ ok: true, total: condos.length, created, updated, failed, errors: errs.slice(0,10) });
+  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+// Cria atividade (chamado → activity) no Moskit automaticamente
+app.post('/api/moskit/sync-ticket/:id', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const cfg = getIntegration('moskit');
+    const ticket = db.prepare('SELECT * FROM tickets WHERE id=?').get(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'ticket_not_found' });
+    const condo = db.prepare('SELECT * FROM condominiums WHERE id=?').get(ticket.condo_id);
+    if (!condo) return res.status(404).json({ error: 'condo_not_found' });
+    // Garante company no Moskit
+    const company = await moskitUpsertCompany(cfg, { name: condo.name, cnpj: condo.cnpj });
+    const act = await moskitCreateActivity(cfg, {
+      type: 'TASK',
+      comments: `[${ticket.priority}] ${ticket.title}\n\n${ticket.description||''}`,
+      company_id: company.id,
+    });
+    res.json({ ok:true, activity: act, company });
+  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
 });
 
 // ---------- Asaas endpoints ----------

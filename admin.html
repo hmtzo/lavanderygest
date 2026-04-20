@@ -948,6 +948,23 @@
     </div>
 
     <div class="card">
+      <div class="font-semibold mb-2">🧲 Moskit CRM</div>
+      <p class="text-xs text-gray-500 mb-3">Sincroniza condomínios como empresas + envia chamados como atividades. Cole a sua API key do Moskit abaixo.</p>
+      <div class="grid grid-cols-1 gap-2">
+        <input class="input py-2" data-int="moskit" data-k="api_key" placeholder="Cole sua API key do Moskit" type="password"/>
+      </div>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip intTest" data-int="moskit">Testar</button>
+        <button class="btn btn-primary intSave" data-int="moskit" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button id="moskitSyncAll" class="chip" style="font-size:11px">🔄 Sincronizar todos os condomínios</button>
+        <a href="https://docs.moskitcrm.com/reference" target="_blank" class="chip" style="font-size:11px;text-decoration:none">📖 Docs Moskit</a>
+      </div>
+      <div id="moskitResult" style="margin-top:10px;font-size:12px"></div>
+    </div>
+
+    <div class="card">
       <div class="font-semibold mb-2">💳 Asaas (cobrança)</div>
       <p class="text-xs text-gray-500 mb-3">Cobrar mensalidade dos condomínios. Gateway brasileiro popular.</p>
       <div class="grid grid-cols-2 gap-2">
@@ -3156,6 +3173,28 @@ document.querySelector('#newCondoBtn')?.addEventListener('click', async () => {
   const d = await r.json();
   loadCondos();
   openCondoDrawer(d.id);
+});
+
+// Moskit: sync all condos
+document.querySelector('#moskitSyncAll')?.addEventListener('click', async () => {
+  if (!confirm('Sincronizar TODOS os condomínios com o Moskit? Cria/atualiza empresas no CRM.')) return;
+  const btn = document.querySelector('#moskitSyncAll'); const orig = btn.textContent;
+  btn.textContent = 'Sincronizando...'; btn.disabled = true;
+  document.querySelector('#moskitResult').innerHTML = '<div style="padding:8px;background:var(--brand-50);border-radius:8px">⏳ Processando...</div>';
+  try {
+    const r = await fetch('/api/moskit/sync-all-condos', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'erro');
+    document.querySelector('#moskitResult').innerHTML = `
+      <div style="padding:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
+        ✓ <b>${d.created} criados</b> · <b>${d.updated} atualizados</b>${d.failed?` · <b style="color:#dc2626">${d.failed} falharam</b>`:''} (${d.total} total)
+        ${d.errors?.length ? '<div style="margin-top:6px;font-size:11px;color:#dc2626">Erros: ' + d.errors.slice(0,3).map(e => e.condo).join(', ') + '...</div>' : ''}
+      </div>`;
+    Toast.success(`${d.created + d.updated} condomínios sincronizados`);
+  } catch (e) {
+    document.querySelector('#moskitResult').innerHTML = `<div style="padding:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b">❌ ${e.message}</div>`;
+  }
+  btn.textContent = orig; btn.disabled = false;
 });
 
 // Padronizar todos em maiúsculo
