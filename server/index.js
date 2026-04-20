@@ -161,6 +161,68 @@ app.post('/api/condominiums/uppercase-all', (req, res) => {
   res.json({ ok: true, updated });
 });
 
+// Merge condos duplicados criados pelo import (c_impl_*) com os originais existentes
+app.post('/api/condominiums/merge-duplicates', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { dry_run } = req.body || {};
+
+  const all = db.prepare('SELECT * FROM condominiums').all();
+  const imported = all.filter(c => String(c.id||'').startsWith('c_impl_'));
+  const others = all.filter(c => !String(c.id||'').startsWith('c_impl_'));
+
+  // Matcher mais agressivo: token overlap (palavras em comum)
+  const tokenize = s => String(s||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\b(condominio|condomínio|edificio|edifício|residencial|clube|cond|ed|res)\b/gi,' ')
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim().split(/\s+/).filter(t => t.length >= 3);
+
+  function bestMatch(name) {
+    const aTokens = new Set(tokenize(name));
+    if (!aTokens.size) return null;
+    let best = null, bestScore = 0;
+    for (const c of others) {
+      const bTokens = new Set(tokenize(c.name));
+      if (!bTokens.size) continue;
+      // Jaccard / min
+      let hits = 0;
+      for (const t of aTokens) if (bTokens.has(t)) hits++;
+      const score = hits / Math.min(aTokens.size, bTokens.size);
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return bestScore >= 0.6 ? { condo: best, score: bestScore } : null;
+  }
+
+  const copy = db.prepare(`UPDATE condominiums SET
+    bank_name = COALESCE(bank_name, ?),
+    bank_agency = COALESCE(bank_agency, ?),
+    bank_account = COALESCE(bank_account, ?),
+    contract_sign_date = COALESCE(contract_sign_date, ?),
+    implantation_date = COALESCE(implantation_date, ?),
+    installation_owner = COALESCE(installation_owner, ?),
+    seller_name = COALESCE(seller_name, ?)
+    WHERE id = ?`);
+  const del = db.prepare('DELETE FROM condominiums WHERE id = ?');
+
+  const results = [];
+  let merged = 0, kept = 0;
+  for (const imp of imported) {
+    const m = bestMatch(imp.name);
+    if (m) {
+      results.push({ from: imp.name, to: m.condo.name, score: +m.score.toFixed(2), action: 'merge' });
+      if (!dry_run) {
+        copy.run(imp.bank_name, imp.bank_agency, imp.bank_account, imp.contract_sign_date, imp.implantation_date, imp.installation_owner, imp.seller_name, m.condo.id);
+        del.run(imp.id);
+      }
+      merged++;
+    } else {
+      results.push({ from: imp.name, action: 'keep' });
+      kept++;
+    }
+  }
+  res.json({ ok:true, imported: imported.length, merged, kept, dry_run: !!dry_run, results });
+});
+
 // Importa dados de implantação (banco/obra/vendedor) e match fuzzy por nome
 app.post('/api/condominiums/bulk-import-implanted', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
