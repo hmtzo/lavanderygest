@@ -456,17 +456,22 @@
 
 <main class="page hidden" id="repasseMain">
   <div class="page-header">
-    <div class="page-title"><h1>Repasse Inteligente</h1><p>Informe só os ciclos — o sistema calcula o repasse e gera o PDF pra cada condomínio.</p></div>
-    <div style="display:flex;gap:10px;align-items:center">
-      <label style="font-size:12px;color:var(--ink-600)">R$/ciclo <input id="rpGlobalRate" type="number" step="0.01" value="2.50" class="input" style="width:90px;height:34px"/></label>
-      <label style="font-size:12px;color:var(--ink-600)">Imposto % <input id="rpGlobalTax" type="number" step="0.01" value="32.25" class="input" style="width:80px;height:34px"/></label>
-    </div>
+    <div class="page-title"><h1>Repasse Inteligente</h1><p>Cada condomínio tem seu próprio valor por ciclo e imposto configurados individualmente.</p></div>
   </div>
+
+  <!-- CONFIGURAÇÃO POR CONDOMÍNIO -->
+  <section class="card-new" style="margin-bottom:16px">
+    <div class="card-header">
+      <div><div class="card-title">⚙️ Configurar valores por condomínio</div><div class="subtle" style="font-size:12px;margin-top:2px">Defina o valor/ciclo e imposto de cada um. Essas configurações são usadas automaticamente no cálculo dos repasses.</div></div>
+      <input id="rpCondoSearch" class="input" placeholder="🔎 Buscar condomínio..." style="width:280px;height:36px"/>
+    </div>
+    <div id="rpCondoRates" style="max-height:420px;overflow-y:auto;margin-top:10px"></div>
+  </section>
 
   <!-- MODO 1: Upload CSV/Excel com todos os condomínios -->
   <section class="card-new" style="margin-bottom:16px;border-left:3px solid var(--brand-600)">
     <div class="card-header">
-      <div><div class="card-title">📁 Upload de planilha (todos os condomínios de uma vez)</div><div class="subtle" style="font-size:12px;margin-top:2px">Colunas obrigatórias: <b>condominio, mes, lavagens, secagens</b>. Opcionais: <b>valor_ciclo</b> e <b>imposto</b> (por condomínio — se vazios usam o global). Aceita CSV e Excel.</div></div>
+      <div><div class="card-title">📁 Upload de planilha (todos os condomínios de uma vez)</div><div class="subtle" style="font-size:12px;margin-top:2px">Colunas: <b>condominio, mes, lavagens, secagens</b>. O valor/ciclo e imposto vem do cadastro de cada condomínio (configurado acima). Opcionalmente você pode passar <b>valor_ciclo</b> e <b>imposto</b> na planilha pra sobrescrever.</div></div>
     </div>
     <div id="rpDrop" style="border:2px dashed var(--ink-200);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .2s">
       <input type="file" id="rpFile" accept=".csv,.xlsx,.xls" style="display:none"/>
@@ -2060,20 +2065,72 @@ function showTab(tab) {
   if (tab === 'integrations') { loadIntegrations(); startWaPoll(); } else { stopWaPoll?.(); }
 }
 
-// ---------- REPASSE: entrada manual + upload em massa ----------
-// Popula dropdown de condomínios ao abrir aba
-async function loadCondoDropdowns() {
+// ---------- REPASSE: configuração por condomínio + entrada manual + upload em massa ----------
+let _condosCache = [];
+async function loadCondoRates() {
   try {
-    const condos = await fetch('/api/condominiums').then(r => r.ok?r.json():[]);
+    _condosCache = await fetch('/api/condominiums').then(r => r.ok?r.json():[]);
+    _condosCache.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    renderCondoRates();
+    // Atualiza o dropdown de entrada manual
     const sel = document.querySelector('#mqCondo');
-    if (sel && !sel._loaded) {
-      sel.innerHTML = '<option value="">— selecione —</option>' + condos.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-      sel._loaded = true;
-    }
-  } catch {}
+    if (sel) sel.innerHTML = '<option value="">— selecione —</option>' + _condosCache.map(c => `<option value="${c.id}" data-rate="${c.cycle_rate||''}" data-tax="${c.tax_rate||''}">${esc(c.name)}${c.cycle_rate?' — R$ '+c.cycle_rate.toFixed(2)+'/ciclo':' ⚠ sem rate'}</option>`).join('');
+  } catch(e) { console.error(e); }
 }
+function renderCondoRates(filter='') {
+  const host = document.querySelector('#rpCondoRates');
+  if (!host) return;
+  const f = (filter||'').toLowerCase();
+  const filtered = _condosCache.filter(c => !f || (c.name||'').toLowerCase().includes(f));
+  const configured = filtered.filter(c => c.cycle_rate).length;
+  host.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:12px;color:var(--ink-600)">
+      <span>${filtered.length} condomínios${f?' encontrados':''} · <b style="color:var(--brand-700)">${configured} configurados</b></span>
+      <span class="subtle">Clique em Enter pra salvar</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:6px">
+      ${filtered.map(c => `
+        <div class="rp-cfg-row" data-id="${c.id}" style="display:grid;grid-template-columns:1fr 110px 90px auto;gap:8px;align-items:center;padding:8px 10px;background:rgba(255,255,255,.5);border-radius:8px">
+          <div style="font-size:13px;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</div>
+          <div style="position:relative">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink-400)">R$/ciclo</span>
+            <input class="input rp-rate" type="number" step="0.01" placeholder="2.50" value="${c.cycle_rate||''}" style="height:34px;padding-left:58px;font-size:13px"/>
+          </div>
+          <div style="position:relative">
+            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink-400)">%</span>
+            <input class="input rp-tax" type="number" step="0.01" placeholder="32.25" value="${c.tax_rate||''}" style="height:34px;padding-right:22px;font-size:13px"/>
+          </div>
+          <span class="rp-status" style="width:22px;text-align:center;font-size:16px">${c.cycle_rate?'✓':'○'}</span>
+        </div>
+      `).join('')}
+    </div>`;
+  // Bind save on blur/enter
+  host.querySelectorAll('.rp-cfg-row').forEach(row => {
+    const id = row.dataset.id;
+    const rateIn = row.querySelector('.rp-rate');
+    const taxIn = row.querySelector('.rp-tax');
+    const status = row.querySelector('.rp-status');
+    const save = async () => {
+      const cycle_rate = parseFloat(rateIn.value) || null;
+      const tax_rate = parseFloat(taxIn.value) || null;
+      status.textContent = '⏳';
+      try {
+        await fetch('/api/condominiums/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cycle_rate, tax_rate }) });
+        status.textContent = '✓';
+        const c = _condosCache.find(x => x.id === id);
+        if (c) { c.cycle_rate = cycle_rate; c.tax_rate = tax_rate; }
+      } catch { status.textContent = '✗'; }
+    };
+    [rateIn, taxIn].forEach(inp => {
+      inp.addEventListener('blur', save);
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { inp.blur(); } });
+    });
+  });
+}
+document.querySelector('#rpCondoSearch')?.addEventListener('input', e => renderCondoRates(e.target.value));
+
 const _origLoadRpsSummary = typeof loadRpsSummary === 'function' ? loadRpsSummary : null;
-async function loadRepasseSummary() { loadCondoDropdowns(); if (_origLoadRpsSummary) _origLoadRpsSummary(); }
+async function loadRepasseSummary() { loadCondoRates(); if (_origLoadRpsSummary) _origLoadRpsSummary(); }
 
 // Entrada manual
 document.querySelector('#mqSaveBtn')?.addEventListener('click', async () => {
@@ -2081,12 +2138,11 @@ document.querySelector('#mqSaveBtn')?.addEventListener('click', async () => {
   const month = document.querySelector('#mqMonth').value;
   const washes = document.querySelector('#mqWashes').value;
   const dries = document.querySelector('#mqDries').value;
-  const rate = document.querySelector('#rpGlobalRate').value;
-  const tax_rate = document.querySelector('#rpGlobalTax').value;
   if (!condo_id) { Toast.warning('Selecione o condomínio'); return; }
   if (!month) { Toast.warning('Informe o mês'); return; }
   try {
-    const r = await fetch('/api/repasse/manual', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ condo_id, month, washes, dries, rate, tax_rate }) });
+    // Rate e tax vêm do cadastro do condomínio (sem passar na chamada)
+    const r = await fetch('/api/repasse/manual', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ condo_id, month, washes, dries }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || d.error);
     const money = n => 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2135,8 +2191,7 @@ async function parseUploadedFile(file) {
   });
 }
 async function handleUpload(file) {
-  const rate = document.querySelector('#rpGlobalRate').value;
-  const tax_rate = document.querySelector('#rpGlobalTax').value;
+  // Rate/tax vêm do cadastro de cada condomínio (pode ser overriden pela planilha via colunas opcionais)
   const host = document.querySelector('#rpBulkResult');
   host.innerHTML = `<div style="padding:12px;background:var(--brand-50);border-radius:10px;font-size:13px">⏳ Processando <b>${file.name}</b> (${(file.size/1024).toFixed(1)}KB)...</div>`;
   let rows;
@@ -2150,7 +2205,7 @@ async function handleUpload(file) {
     return;
   }
   try {
-    const r = await fetch('/api/repasse/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rows, rate, tax_rate }) });
+    const r = await fetch('/api/repasse/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rows }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || d.error);
     const money = n => 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});

@@ -157,7 +157,8 @@ app.patch('/api/condominiums/:id', (req,res) => {
   const fields = ['name','address','city','cep','cnpj','washers','dryers',
     'maintenance_interval_months','maintenance_label','cycles_per_week',
     'soap_ml_per_cycle','softener_ml_per_cycle','gallon_ml',
-    'soap_gallons_on_site','softener_gallons_on_site','contact_email'];
+    'soap_gallons_on_site','softener_gallons_on_site','contact_email',
+    'cycle_rate','tax_rate'];
   const sets = [], args = [];
   fields.forEach(f => { if (b[f] !== undefined) { sets.push(`${f}=?`); args.push(b[f]); } });
   if (!sets.length) return res.json({ ok:true, changed:0 });
@@ -1255,6 +1256,8 @@ try { db.exec(`ALTER TABLE condominiums ADD COLUMN softener_gallons_on_site REAL
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN last_delivery_at INTEGER`); } catch(e){}
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN contact_email TEXT`); } catch(e){}
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN slug TEXT`); } catch(e){}
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN cycle_rate REAL`); } catch(e){}
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN tax_rate REAL`); } catch(e){}
 
 function makeSlug(s) {
   return (s||'').toString()
@@ -1879,9 +1882,12 @@ app.post('/api/repasse/manual', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   const { condo_id, month, washes, dries, rate, tax_rate } = req.body || {};
   if (!condo_id || !month) return res.status(400).json({ error: 'missing_fields' });
+  const condoCfg = db.prepare('SELECT cycle_rate, tax_rate FROM condominiums WHERE id=?').get(condo_id);
   const w = parseInt(washes) || 0, d = parseInt(dries) || 0;
-  const r = parseFloat(rate) || 2.50;
-  const t = (parseFloat(tax_rate) || 32.25) / 100;
+  // Prioridade: valor informado na chamada > valor do condomínio > erro
+  const r = parseFloat(rate) || (condoCfg?.cycle_rate || null);
+  const t = ((parseFloat(tax_rate) || (condoCfg?.tax_rate || null)) || 0) / 100;
+  if (!r) return res.status(400).json({ error: 'no_rate_configured', hint: 'Configure o valor por ciclo deste condomínio na aba Condomínios' });
   const cycles = w + d;
   const gross = cycles * r;
   const taxAmount = gross * t;
@@ -1904,10 +1910,10 @@ app.post('/api/repasse/bulk', async (req, res) => {
   try {
     const { rows, rate, tax_rate } = req.body || {};
     if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'no_rows' });
-    const r = parseFloat(rate) || 2.50;
-    const t = (parseFloat(tax_rate) || 32.25) / 100;
+    const globalRate = rate ? parseFloat(rate) : null;
+    const globalTax = tax_rate ? parseFloat(tax_rate) : null;
 
-    const condos = db.prepare('SELECT id, name FROM condominiums').all();
+    const condos = db.prepare('SELECT id, name, cycle_rate, tax_rate FROM condominiums').all();
     const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
     function matchCondo(name) {
       const q = norm(name); if (!q) return null;
@@ -1950,14 +1956,18 @@ app.post('/api/repasse/bulk', async (req, res) => {
       const parseBR = s => { if (s==null||s==='') return null; const str=String(s).replace(/R\$\s*/g,'').replace(/\./g,'').replace(',','.'); const n=parseFloat(str); return isNaN(n)?null:n; };
       const rowRate = parseBR(row.valor_ciclo || row['valor/ciclo'] || row.rate || row.reembolso || row['reembolso_por_ciclo']);
       const rowTax = parseBR(String(row.imposto||row.tax_rate||row.imposto_percentual||'').replace('%',''));
-      const effRate = rowRate != null && rowRate > 0 ? rowRate : r;
-      const effTax = rowTax != null ? (rowTax > 1 ? rowTax/100 : rowTax) : t;
       const matched = matchCondo(condoName);
       const month = normalizeMonth(monthStr);
       if (!matched) { results.push({ condoName, monthStr, ok:false, reason:'no_condo_match' }); continue; }
       if (!month) { results.push({ condoName, monthStr, ok:false, reason:'invalid_month' }); continue; }
       const cycles = (w + d) || cyclesExplicit;
       if (!cycles) { results.push({ condoName, monthStr, ok:false, reason:'no_cycles' }); continue; }
+      // Prioridade: valor da linha > valor do condomínio (DB) > global informado > erro
+      const effRate = (rowRate != null && rowRate > 0 ? rowRate : null)
+        ?? matched.cycle_rate ?? globalRate;
+      const effTaxPct = rowTax != null ? (rowTax > 1 ? rowTax : rowTax*100) : (matched.tax_rate ?? globalTax);
+      if (effRate == null || !effRate) { results.push({ condoName, monthStr, ok:false, reason:'no_rate_configured' }); continue; }
+      const effTax = (effTaxPct || 0) / 100;
       const gross = cycles * effRate;
       const taxAmount = gross * effTax;
       const repasse = gross - taxAmount;
