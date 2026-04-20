@@ -623,10 +623,18 @@
   </section>
 
   <section class="card-new">
+    <div id="implBulkBar" style="display:none;padding:10px 16px;background:var(--brand-50);border-bottom:1px solid var(--brand-200);display:none;justify-content:space-between;align-items:center;font-size:13px">
+      <div><b id="implBulkCount">0</b> implantação(ões) selecionada(s)</div>
+      <div style="display:flex;gap:8px">
+        <button id="implBulkClear" class="btn-new ghost sm">Limpar seleção</button>
+        <button id="implBulkDone" class="btn-new brand sm">✓ Marcar como implantado</button>
+      </div>
+    </div>
     <div style="overflow-x:auto">
       <table class="table-new">
         <thead>
           <tr>
+            <th style="width:36px"><input type="checkbox" id="implCheckAll" title="Selecionar todos"/></th>
             <th>Condomínio</th>
             <th>Cidade</th>
             <th style="width:180px">Progresso</th>
@@ -3569,6 +3577,7 @@ function renderImplRows(rows) {
     const pillCls = atrasada ? 'danger' : IMPL_STATUS_PILL[r.status] || 'neutral';
     const pillTxt = atrasada ? 'Atrasada' : IMPL_STATUS_LABEL[r.status] || r.status;
     return `<tr data-id="${r.id}" class="implRow">
+      <td><input type="checkbox" class="implChk" data-id="${r.id}" ${r.status==='concluida'?'disabled title="já concluída"':''}/></td>
       <td><b>${esc(r.condo_name||'—')}</b></td>
       <td class="subtle">${esc(r.condo_city||'—')}</td>
       <td>
@@ -3585,8 +3594,44 @@ function renderImplRows(rows) {
       <td><span class="card-action">Abrir →</span></td>
     </tr>`;
   }).join('');
-  tbody.querySelectorAll('.implRow').forEach(el => el.addEventListener('click', () => openImplantationDrawer(el.dataset.id)));
+  // Clique na linha (exceto no checkbox) abre drawer
+  tbody.querySelectorAll('.implRow').forEach(el => el.addEventListener('click', (e) => {
+    if (e.target.classList.contains('implChk') || e.target.tagName === 'INPUT') return;
+    openImplantationDrawer(el.dataset.id);
+  }));
+  tbody.querySelectorAll('.implChk').forEach(ch => ch.addEventListener('change', updateImplBulk));
+  updateImplBulk();
 }
+function updateImplBulk() {
+  const sel = document.querySelectorAll('.implChk:checked');
+  const bar = document.querySelector('#implBulkBar');
+  if (sel.length) { bar.style.display = 'flex'; document.querySelector('#implBulkCount').textContent = sel.length; }
+  else bar.style.display = 'none';
+}
+document.querySelector('#implCheckAll')?.addEventListener('change', (e) => {
+  document.querySelectorAll('.implChk:not(:disabled)').forEach(c => c.checked = e.target.checked);
+  updateImplBulk();
+});
+document.querySelector('#implBulkClear')?.addEventListener('click', () => {
+  document.querySelectorAll('.implChk').forEach(c => c.checked = false);
+  document.querySelector('#implCheckAll').checked = false;
+  updateImplBulk();
+});
+document.querySelector('#implBulkDone')?.addEventListener('click', async () => {
+  const ids = Array.from(document.querySelectorAll('.implChk:checked')).map(c => c.dataset.id);
+  if (!ids.length) return;
+  if (!confirm(`Marcar ${ids.length} implantação(ões) como CONCLUÍDA(S)? Isso pula as etapas do passo a passo e finaliza direto.`)) return;
+  const btn = document.querySelector('#implBulkDone');
+  const orig = btn.textContent; btn.textContent = 'Processando...'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/implantations/bulk-complete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || d.error);
+    Toast.success(`${d.completed} implantações concluídas`);
+    loadImplantations();
+  } catch (e) { Toast.error('Erro: ' + e.message); }
+  btn.textContent = orig; btn.disabled = false;
+});
 document.querySelectorAll('.implTab').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.implTab').forEach(x => x.classList.toggle('active', x===b));
   _implFilter = b.dataset.s; loadImplantations();

@@ -748,6 +748,33 @@ app.delete('/api/implantation-checklist-items/:id', (req,res) => {
   res.json({ ok:true });
 });
 
+// Marcar várias implantações como concluídas (bulk, pulando passo a passo)
+app.post('/api/implantations/bulk-complete', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error:'no_ids' });
+  const now = Date.now();
+  const updImp = db.prepare(`UPDATE implantations SET status='concluida', completed_at=COALESCE(completed_at,?), updated_at=? WHERE id=?`);
+  const updSteps = db.prepare(`UPDATE implantation_steps SET completed=1, completed_at=COALESCE(completed_at,?), status='concluida' WHERE implantation_id=? AND completed=0`);
+  let completed = 0;
+  const tx = db.transaction(() => {
+    for (const id of ids) {
+      const r = updImp.run(now, now, id);
+      if (r.changes > 0) {
+        updSteps.run(now, id);
+        completed++;
+        // Log
+        try {
+          db.prepare(`INSERT INTO implantation_logs (id, implantation_id, event, message, created_at) VALUES (?,?,?,?,?)`)
+            .run('log_'+Math.random().toString(36).slice(2,10), id, 'bulk_completed', 'Marcada como concluída via bulk (pulando passo a passo)', now);
+        } catch {}
+      }
+    }
+  });
+  tx();
+  res.json({ ok:true, completed, requested: ids.length });
+});
+
 // Reset template v2 para uma implantação existente
 app.post('/api/implantations/:id/reset-template', (req, res) => {
   const i = db.prepare('SELECT * FROM implantations WHERE id=?').get(req.params.id);
