@@ -2985,11 +2985,36 @@ function renderRpPage(filter='') {
       }).join('')}
     </div>`;
   host.querySelectorAll('.rpp-panel').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); openCondoPanel(btn.dataset.id); }));
-  host.querySelectorAll('.rpp-pdf').forEach(btn => btn.addEventListener('click', e => {
+  host.querySelectorAll('.rpp-pdf').forEach(btn => btn.addEventListener('click', async e => {
     e.stopPropagation();
     const month = document.querySelector('#rpPageMonth').value;
     if (!month) { Toast.warning('Escolha o mês'); return; }
-    window.open(`/api/condominiums/${btn.dataset.id}/monthly-report.pdf?month=${month}`, '_blank');
+    const id = btn.dataset.id;
+    const row = btn.closest('.rpp-row');
+    // Auto-salva antes de gerar PDF se os campos estão preenchidos
+    const w = +row.querySelector('.rpp-w').value || 0;
+    const d = +row.querySelector('.rpp-d').value || 0;
+    const type = row.querySelector('.rpp-t').value;
+    const val = +row.querySelector('.rpp-v').value || 0;
+    const tax = +row.querySelector('.rpp-tax').value || 0;
+    const price = +row.querySelector('.rpp-price').value || 0;
+    btn.textContent = '⏳'; btn.disabled = true;
+    try {
+      if (w + d > 0) {
+        await fetch('/api/condominiums/'+id+'/repasse', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ month, washes: w, dries: d, type, value: val, tax, price }),
+        });
+      }
+      // Verifica se existe repasse salvo pro mês
+      const check = await fetch(`/api/condominiums/${id}/monthly-report.pdf?month=${month}`, { method: 'HEAD' });
+      if (check.status === 404) {
+        Toast.warning('Preencha lavagens/secagens e clique em Salvar primeiro');
+        return;
+      }
+      window.open(`/api/condominiums/${id}/monthly-report.pdf?month=${month}`, '_blank');
+    } catch (err) { Toast.error('Erro: ' + err.message); }
+    btn.textContent = '📄'; btn.disabled = false;
   }));
   host.querySelectorAll('.rpp-row').forEach(row => {
     const get = s => row.querySelector(s);
