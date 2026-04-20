@@ -158,7 +158,7 @@ app.patch('/api/condominiums/:id', (req,res) => {
     'maintenance_interval_months','maintenance_label','cycles_per_week',
     'soap_ml_per_cycle','softener_ml_per_cycle','gallon_ml',
     'soap_gallons_on_site','softener_gallons_on_site','contact_email',
-    'cycle_rate','tax_rate'];
+    'cycle_rate','cycle_price','tax_rate'];
   const sets = [], args = [];
   fields.forEach(f => { if (b[f] !== undefined) { sets.push(`${f}=?`); args.push(b[f]); } });
   if (!sets.length) return res.json({ ok:true, changed:0 });
@@ -1256,7 +1256,8 @@ try { db.exec(`ALTER TABLE condominiums ADD COLUMN softener_gallons_on_site REAL
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN last_delivery_at INTEGER`); } catch(e){}
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN contact_email TEXT`); } catch(e){}
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN slug TEXT`); } catch(e){}
-try { db.exec(`ALTER TABLE condominiums ADD COLUMN cycle_rate REAL`); } catch(e){}
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN cycle_rate REAL`); } catch(e){}  // R$ repasse / ciclo
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN cycle_price REAL`); } catch(e){} // R$ cobrado do usuário / ciclo
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN tax_rate REAL`); } catch(e){}
 
 function makeSlug(s) {
@@ -1880,27 +1881,36 @@ app.get('/api/repasse/summary', (req, res) => {
 // O sistema calcula tudo (valor/ciclo e imposto configuráveis) e salva em condo_payments
 app.post('/api/repasse/manual', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
-  const { condo_id, month, washes, dries, rate, tax_rate } = req.body || {};
+  const { condo_id, month, washes, dries, rate, price, tax_rate } = req.body || {};
   if (!condo_id || !month) return res.status(400).json({ error: 'missing_fields' });
-  const condoCfg = db.prepare('SELECT cycle_rate, tax_rate FROM condominiums WHERE id=?').get(condo_id);
+  const cfg = db.prepare('SELECT cycle_rate, cycle_price, tax_rate, name FROM condominiums WHERE id=?').get(condo_id);
   const w = parseInt(washes) || 0, d = parseInt(dries) || 0;
-  // Prioridade: valor informado na chamada > valor do condomínio > erro
-  const r = parseFloat(rate) || (condoCfg?.cycle_rate || null);
-  const t = ((parseFloat(tax_rate) || (condoCfg?.tax_rate || null)) || 0) / 100;
-  if (!r) return res.status(400).json({ error: 'no_rate_configured', hint: 'Configure o valor por ciclo deste condomínio na aba Condomínios' });
+  const r = parseFloat(rate) || cfg?.cycle_rate;
+  const p = parseFloat(price) || cfg?.cycle_price || null;
+  const t = ((parseFloat(tax_rate) || cfg?.tax_rate) || 0) / 100;
+  if (!r) return res.status(400).json({ error: 'no_rate_configured', hint: 'Configure o repasse/ciclo deste condomínio' });
   const cycles = w + d;
-  const gross = cycles * r;
-  const taxAmount = gross * t;
-  const repasse = gross - taxAmount;
+  // Repasse: cycles × rate - imposto sobre o repasse
+  const repasseBruto = cycles * r;
+  const taxAmount = repasseBruto * t;
+  const repasseLiq = repasseBruto - taxAmount;
+  // Receita total da máquina (pra visibilidade admin)
+  const machineRevenue = p ? cycles * p : null;
+  const lavanderyNet = machineRevenue != null ? machineRevenue - repasseBruto : null;
+
   const payId = `pay_manual_${condo_id}_${month}`;
-  const condo = db.prepare('SELECT name FROM condominiums WHERE id=?').get(condo_id);
   db.prepare(`INSERT INTO condo_payments (id,condo_id,period,type,amount,reference,note)
     VALUES (?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET amount=excluded.amount, reference=excluded.reference, note=excluded.note`)
-    .run(payId, condo_id, month, 'repasse', repasse,
-      `R$ ${r.toFixed(2)}/ciclo`,
-      `${cycles} ciclos (${w} lavagens + ${d} secagens) · Bruto R$ ${gross.toFixed(2)} · Imposto ${(t*100).toFixed(2)}% · Repasse líquido`);
-  res.json({ ok:true, condo_name: condo?.name, cycles, gross, tax_amount: taxAmount, repasse, month, payment_id: payId });
+    .run(payId, condo_id, month, 'repasse', repasseLiq,
+      `R$ ${r.toFixed(2)}/ciclo${p?` · máquina R$ ${p.toFixed(2)}/ciclo`:''}`,
+      `${cycles} ciclos (${w} lavagens + ${d} secagens) · Repasse bruto R$ ${repasseBruto.toFixed(2)} · Imposto ${(t*100).toFixed(2)}% · Repasse líquido`);
+  res.json({
+    ok: true, condo_name: cfg?.name, cycles, month, payment_id: payId,
+    repasse_bruto: repasseBruto, tax_amount: taxAmount, repasse_liquido: repasseLiq,
+    machine_revenue: machineRevenue, lavandery_net: lavanderyNet,
+    cycle_rate: r, cycle_price: p, tax_rate: t*100,
+  });
 });
 
 // Upload em massa: CSV ou Excel com todas as lavanderias de uma vez
@@ -1913,7 +1923,7 @@ app.post('/api/repasse/bulk', async (req, res) => {
     const globalRate = rate ? parseFloat(rate) : null;
     const globalTax = tax_rate ? parseFloat(tax_rate) : null;
 
-    const condos = db.prepare('SELECT id, name, cycle_rate, tax_rate FROM condominiums').all();
+    const condos = db.prepare('SELECT id, name, cycle_rate, cycle_price, tax_rate FROM condominiums').all();
     const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
     function matchCondo(name) {
       const q = norm(name); if (!q) return null;
@@ -1954,7 +1964,8 @@ app.post('/api/repasse/bulk', async (req, res) => {
       const cyclesExplicit = parseInt(row.ciclos || row.cycles || 0) || 0;
       // Permite override de rate e tax por linha (BR number tolerante)
       const parseBR = s => { if (s==null||s==='') return null; const str=String(s).replace(/R\$\s*/g,'').replace(/\./g,'').replace(',','.'); const n=parseFloat(str); return isNaN(n)?null:n; };
-      const rowRate = parseBR(row.valor_ciclo || row['valor/ciclo'] || row.rate || row.reembolso || row['reembolso_por_ciclo']);
+      const rowRate = parseBR(row.repasse_ciclo || row.valor_ciclo || row['valor/ciclo'] || row.rate || row.reembolso || row['reembolso_por_ciclo']);
+      const rowPrice = parseBR(row.preco_ciclo || row['preco/ciclo'] || row.preco_maquina || row.cycle_price);
       const rowTax = parseBR(String(row.imposto||row.tax_rate||row.imposto_percentual||'').replace('%',''));
       const matched = matchCondo(condoName);
       const month = normalizeMonth(monthStr);
@@ -1963,18 +1974,20 @@ app.post('/api/repasse/bulk', async (req, res) => {
       const cycles = (w + d) || cyclesExplicit;
       if (!cycles) { results.push({ condoName, monthStr, ok:false, reason:'no_cycles' }); continue; }
       // Prioridade: valor da linha > valor do condomínio (DB) > global informado > erro
-      const effRate = (rowRate != null && rowRate > 0 ? rowRate : null)
-        ?? matched.cycle_rate ?? globalRate;
+      const effRate = (rowRate != null && rowRate > 0 ? rowRate : null) ?? matched.cycle_rate ?? globalRate;
+      const effPrice = (rowPrice != null && rowPrice > 0 ? rowPrice : null) ?? matched.cycle_price ?? null;
       const effTaxPct = rowTax != null ? (rowTax > 1 ? rowTax : rowTax*100) : (matched.tax_rate ?? globalTax);
       if (effRate == null || !effRate) { results.push({ condoName, monthStr, ok:false, reason:'no_rate_configured' }); continue; }
       const effTax = (effTaxPct || 0) / 100;
-      const gross = cycles * effRate;
-      const taxAmount = gross * effTax;
-      const repasse = gross - taxAmount;
+      const repasseBruto = cycles * effRate;
+      const taxAmount = repasseBruto * effTax;
+      const repasse = repasseBruto - taxAmount;
+      const machineRevenue = effPrice ? cycles * effPrice : null;
       const payId = `pay_bulk_${matched.id}_${month}`;
-      upsert.run(payId, matched.id, month, 'repasse', repasse, `R$ ${effRate.toFixed(2)}/ciclo`,
-        `${cycles} ciclos (${w} lavagens + ${d} secagens) · Bruto R$ ${gross.toFixed(2)} · Imposto ${(effTax*100).toFixed(2)}% · Repasse líquido`);
-      results.push({ condoName, condo_id: matched.id, condo_name: matched.name, month, cycles, gross, repasse, rate: effRate, tax: effTax*100, ok:true });
+      upsert.run(payId, matched.id, month, 'repasse', repasse,
+        `R$ ${effRate.toFixed(2)}/ciclo${effPrice?` · máquina R$ ${effPrice.toFixed(2)}`:''}`,
+        `${cycles} ciclos (${w} lavagens + ${d} secagens) · Repasse bruto R$ ${repasseBruto.toFixed(2)} · Imposto ${(effTax*100).toFixed(2)}% · Repasse líquido`);
+      results.push({ condoName, condo_id: matched.id, condo_name: matched.name, month, cycles, repasse_bruto: repasseBruto, repasse, machine_revenue: machineRevenue, rate: effRate, price: effPrice, tax: effTax*100, ok:true });
     }
     const okCount = results.filter(x => x.ok).length;
     const failCount = results.length - okCount;

@@ -462,7 +462,7 @@
   <!-- CONFIGURAÇÃO POR CONDOMÍNIO -->
   <section class="card-new" style="margin-bottom:16px">
     <div class="card-header">
-      <div><div class="card-title">⚙️ Configurar valores por condomínio</div><div class="subtle" style="font-size:12px;margin-top:2px">Defina o valor/ciclo e imposto de cada um. Essas configurações são usadas automaticamente no cálculo dos repasses.</div></div>
+      <div><div class="card-title">⚙️ Configurar valores por condomínio</div><div class="subtle" style="font-size:12px;margin-top:2px"><b>Preço máquina</b>: quanto o usuário paga por ciclo. <b>Repasse/ciclo</b>: quanto o condomínio recebe por ciclo (antes do imposto). <b>Imposto</b>: % aplicado sobre o repasse.</div></div>
       <input id="rpCondoSearch" class="input" placeholder="🔎 Buscar condomínio..." style="width:280px;height:36px"/>
     </div>
     <div id="rpCondoRates" style="max-height:420px;overflow-y:auto;margin-top:10px"></div>
@@ -2086,44 +2086,44 @@ function renderCondoRates(filter='') {
   host.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:12px;color:var(--ink-600)">
       <span>${filtered.length} condomínios${f?' encontrados':''} · <b style="color:var(--brand-700)">${configured} configurados</b></span>
-      <span class="subtle">Clique em Enter pra salvar</span>
+      <span class="subtle">Sai do campo ou Enter pra salvar</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1.4fr 110px 110px 90px 28px;gap:6px;padding:0 10px 6px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em">
+      <div>Condomínio</div><div>Preço máquina</div><div>Repasse/ciclo</div><div>Imposto</div><div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr;gap:6px">
       ${filtered.map(c => `
-        <div class="rp-cfg-row" data-id="${c.id}" style="display:grid;grid-template-columns:1fr 110px 90px auto;gap:8px;align-items:center;padding:8px 10px;background:rgba(255,255,255,.5);border-radius:8px">
+        <div class="rp-cfg-row" data-id="${c.id}" style="display:grid;grid-template-columns:1.4fr 110px 110px 90px 28px;gap:6px;align-items:center;padding:8px 10px;background:rgba(255,255,255,.5);border-radius:8px">
           <div style="font-size:13px;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</div>
-          <div style="position:relative">
-            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink-400)">R$/ciclo</span>
-            <input class="input rp-rate" type="number" step="0.01" placeholder="2.50" value="${c.cycle_rate||''}" style="height:34px;padding-left:58px;font-size:13px"/>
-          </div>
-          <div style="position:relative">
-            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink-400)">%</span>
-            <input class="input rp-tax" type="number" step="0.01" placeholder="32.25" value="${c.tax_rate||''}" style="height:34px;padding-right:22px;font-size:13px"/>
-          </div>
-          <span class="rp-status" style="width:22px;text-align:center;font-size:16px">${c.cycle_rate?'✓':'○'}</span>
+          <div style="position:relative"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink-400)">R$</span><input class="input rp-price" type="number" step="0.01" placeholder="7.00" value="${c.cycle_price||''}" style="height:34px;padding-left:28px;font-size:13px"/></div>
+          <div style="position:relative"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink-400)">R$</span><input class="input rp-rate" type="number" step="0.01" placeholder="2.50" value="${c.cycle_rate||''}" style="height:34px;padding-left:28px;font-size:13px"/></div>
+          <div style="position:relative"><input class="input rp-tax" type="number" step="0.01" placeholder="32.25" value="${c.tax_rate||''}" style="height:34px;padding-right:22px;font-size:13px"/><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink-400)">%</span></div>
+          <span class="rp-status" style="text-align:center;font-size:16px">${c.cycle_rate?'✓':'○'}</span>
         </div>
       `).join('')}
     </div>`;
   // Bind save on blur/enter
   host.querySelectorAll('.rp-cfg-row').forEach(row => {
     const id = row.dataset.id;
+    const priceIn = row.querySelector('.rp-price');
     const rateIn = row.querySelector('.rp-rate');
     const taxIn = row.querySelector('.rp-tax');
     const status = row.querySelector('.rp-status');
     const save = async () => {
+      const cycle_price = parseFloat(priceIn.value) || null;
       const cycle_rate = parseFloat(rateIn.value) || null;
       const tax_rate = parseFloat(taxIn.value) || null;
       status.textContent = '⏳';
       try {
-        await fetch('/api/condominiums/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cycle_rate, tax_rate }) });
+        await fetch('/api/condominiums/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cycle_price, cycle_rate, tax_rate }) });
         status.textContent = '✓';
         const c = _condosCache.find(x => x.id === id);
-        if (c) { c.cycle_rate = cycle_rate; c.tax_rate = tax_rate; }
+        if (c) { c.cycle_price = cycle_price; c.cycle_rate = cycle_rate; c.tax_rate = tax_rate; }
       } catch { status.textContent = '✗'; }
     };
-    [rateIn, taxIn].forEach(inp => {
+    [priceIn, rateIn, taxIn].forEach(inp => {
       inp.addEventListener('blur', save);
-      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { inp.blur(); } });
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
     });
   });
 }
