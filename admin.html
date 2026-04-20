@@ -2170,8 +2170,11 @@ function loadScript(src) {
   });
 }
 async function parseUploadedFile(file) {
-  const ext = (file.name.split('.').pop() || '').toLowerCase();
-  // Qualquer extensão: tenta parsear como Excel primeiro (XLSX também lê CSV, números, xls, ods)
+  // Detecta formato pelo conteúdo (não pela extensão): HTML (cartão), XLSX, CSV
+  const text = await file.slice(0, 500).text().catch(() => '');
+  const looksHtml = /<html|<table|ng-repeat|MACHINE_UTILIZATION|Uso de M[áa]quina/i.test(text);
+  if (looksHtml) return parseHtmlUsoCartao(await file.text());
+  // Fallback: Excel/CSV via SheetJS
   if (!window.XLSX) {
     try { await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'); }
     catch { await loadScript('https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'); }
@@ -2182,13 +2185,52 @@ async function parseUploadedFile(file) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
   if (!rows.length) throw new Error('Arquivo sem dados');
-  // Normaliza keys: lowercase + remove acentos
   const norm = s => String(s||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_');
   return rows.map(row => {
     const out = {};
     for (const k of Object.keys(row)) out[norm(k)] = row[k];
     return out;
   });
+}
+
+// Parser do formato "Uso de Máquina - Extrato" (HTML exportado como .xls)
+function parseHtmlUsoCartao(html) {
+  // Período
+  const per = html.match(/De:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*At[eé]:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+  let month = null;
+  if (per) {
+    const [d, m, y] = per[2].split('/');
+    month = `${y.length === 2 ? '20' + y : y}-${m.padStart(2, '0')}`;
+  }
+
+  // Cada PDV: <h4>LAVANDERY - NOME</h4> ... depois segue bloco com transações até próximo <h4>
+  const pdvRe = /<h4 class="ng-binding">([^<]+)<\/h4>\s*<h5[^>]*>[^<]*<span[^>]*>Total Geral do Ponto de Venda[^<]*<\/span>[^<]*?([\d.,]+)/g;
+  const pdvList = [];
+  let m;
+  while ((m = pdvRe.exec(html))) {
+    pdvList.push({ name: m[1].trim(), total: parseInt(m[2].replace(/\./g, '')) || 0, start: m.index });
+  }
+
+  // Para cada PDV, conta LAVADORA e SECADORA no trecho até o próximo PDV
+  const out = [];
+  for (let i = 0; i < pdvList.length; i++) {
+    const endIdx = i + 1 < pdvList.length ? pdvList[i + 1].start : html.length;
+    const section = html.slice(pdvList[i].start, endIdx);
+    // Cada transação tem uma célula tipo <td>LAVADORA - 3</td> ou <td>SECADORA - 8</td>
+    const washes = (section.match(/>\s*LAVADORA[^<]*</g) || []).length;
+    const dries = (section.match(/>\s*SECADORA[^<]*</g) || []).length;
+    // Remove prefixo "LAVANDERY - " do nome
+    const name = pdvList[i].name.replace(/^LAVANDERY\s*[-–]\s*/i, '').replace(/^COND\.?\s+/i, 'Condomínio ').trim();
+    out.push({
+      condominio: name,
+      mes: month,
+      lavagens: washes,
+      secagens: dries,
+      total_registrado: pdvList[i].total,
+    });
+  }
+  if (!out.length) throw new Error('Nenhum PDV encontrado no arquivo');
+  return out;
 }
 async function handleUpload(file) {
   // Rate/tax vêm do cadastro de cada condomínio (pode ser overriden pela planilha via colunas opcionais)
@@ -2198,7 +2240,9 @@ async function handleUpload(file) {
   try {
     rows = await parseUploadedFile(file);
     if (!rows.length) throw new Error('Arquivo vazio');
-    host.innerHTML = `<div style="padding:12px;background:var(--brand-50);border-radius:10px;font-size:13px">✓ ${rows.length} linhas lidas · enviando pra o servidor...</div>`;
+    const detectedMonth = rows[0]?.mes || '—';
+    const totalCycles = rows.reduce((s, r) => s + ((+r.lavagens||0) + (+r.secagens||0)), 0);
+    host.innerHTML = `<div style="padding:12px;background:var(--brand-50);border-radius:10px;font-size:13px">✓ ${rows.length} condomínios · mês <b>${detectedMonth}</b> · <b>${totalCycles.toLocaleString('pt-BR')}</b> ciclos totais · enviando pra o servidor...</div>`;
   } catch (e) {
     host.innerHTML = `<div style="padding:12px;background:#fee2e2;color:#991b1b;border-radius:10px;font-size:13px">❌ Erro ao ler arquivo: ${e.message}</div>`;
     Toast.error('Falha ao ler arquivo');
