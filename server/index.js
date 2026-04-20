@@ -2104,8 +2104,27 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
   if (!month || !cid) return res.status(400).json({ error: 'missing_params' });
   const condo = db.prepare('SELECT * FROM condominiums WHERE id=?').get(cid);
   if (!condo) return res.status(404).json({ error:'not_found' });
-  const r = db.prepare('SELECT * FROM condo_repasse WHERE condo_id=? AND month=?').get(cid, month);
-  if (!r) return res.status(404).json({ error:'no_repasse_for_month' });
+  let r = db.prepare('SELECT * FROM condo_repasse WHERE condo_id=? AND month=?').get(cid, month);
+  // Se não tem no DB, permite gerar on-the-fly via query params (?washes=X&dries=Y&type=fixed|percent&value=N&tax=N&price=N)
+  if (!r) {
+    const w = parseInt(req.query.washes) || 0, d = parseInt(req.query.dries) || 0;
+    const type = req.query.type || 'fixed';
+    const value = parseFloat(req.query.value) || condo.cycle_rate || 0;
+    const tax = parseFloat(req.query.tax) || condo.tax_rate || 0;
+    const price = parseFloat(req.query.price) || condo.cycle_price || 0;
+    const cycles = w + d;
+    const repasse_bruto = type === 'fixed' ? cycles * value : cycles * price * (value / 100);
+    const imposto = repasse_bruto * (tax / 100);
+    r = {
+      washes: w, dries: d, cycles,
+      type, value, tax_pct: tax, price,
+      receita_maquina: cycles * price,
+      repasse_bruto, imposto,
+      repasse_liquido: repasse_bruto - imposto,
+      liquido_lavandery: price > 0 ? cycles * price - repasse_bruto : null,
+    };
+    // Se tudo zerado, ainda assim gera (mostra o modelo em branco)
+  }
 
   // Dados pra comparação: mês anterior
   const prevDate = new Date(month + '-01'); prevDate.setMonth(prevDate.getMonth() - 1);
