@@ -64,6 +64,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       Entrega de Equipamentos
     </a>
+    <a href="#" data-tab="repasses" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Repasses
+    </a>
 
     <div class="sidebar-section">Cadastro</div>
     <a href="#" data-tab="condos" class="tab nav-item">
@@ -446,6 +450,36 @@
       <p><b>Google Calendar:</b> abra <a href="https://calendar.google.com" target="_blank" class="card-action">calendar.google.com</a> → Configurações do calendário → Integrar calendário → copie o <b>URL secreto no formato iCal</b>.</p>
       <p><b>Microsoft Outlook / 365:</b> em Outlook web → Configurações → Calendário → Calendários compartilhados → Publicar um calendário → selecione permissão "Ver todos os detalhes" → copie o link <b>.ics</b>.</p>
       <p>Cole esses URLs (separados por vírgula) na aba <b>Integrações</b> → card "Agenda externa (iCal)" e clique em Salvar. Os eventos aparecem aqui automaticamente.</p>
+    </div>
+  </section>
+</main>
+
+<main class="page hidden" id="repassesMain">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Repasses</h1>
+      <p>Lance os ciclos mensais de cada condomínio, calcula automático e gera relatório PDF.</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <label style="font-size:12px;color:var(--ink-600)">Mês</label>
+      <input id="rpPageMonth" type="month" class="input" style="height:38px;width:180px"/>
+      <button id="rpPageReport" class="btn-new ghost">📄 Relatório do mês</button>
+    </div>
+  </div>
+
+  <section class="card-new" style="margin-bottom:16px">
+    <div class="card-header">
+      <div><div class="card-title">Lançamento mensal</div><div class="subtle" style="font-size:12px;margin-top:2px">Preencha lavagens e secagens. Os demais campos vêm do último lançamento do condomínio — pode editar individualmente.</div></div>
+      <input id="rpPageSearch" class="input" placeholder="🔎 Buscar condomínio..." style="width:240px;height:36px"/>
+    </div>
+    <div id="rpPageTotals" style="display:flex;gap:16px;padding:10px 14px;background:var(--ink-50);border-radius:10px;font-size:13px;margin-bottom:10px">
+      <div><span class="subtle">Total repasse líquido:</span> <b id="rpPageTotalRepasse" style="color:var(--brand-700)">R$ 0,00</b></div>
+      <div><span class="subtle">Total Lavandery:</span> <b id="rpPageTotalLav" style="color:#10b981">R$ 0,00</b></div>
+      <div style="margin-left:auto"><span class="subtle" id="rpPageConfigured">0/0 lançados</span></div>
+    </div>
+    <div id="rpPageList" style="max-height:620px;overflow-y:auto"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:10px">
+      <button id="rpPageSaveAll" class="btn-new brand">💾 Salvar todos</button>
     </div>
   </section>
 </main>
@@ -1483,39 +1517,7 @@ async function openCondoDrawer(id) {
         <div id="cycleLogs" style="margin-top:12px;font-size:12px;max-height:200px;overflow-y:auto"></div>
       </div>
 
-      <div class="section-title">💰 Repasse do mês</div>
-      <div class="card" style="padding:14px">
-        <div class="grid grid-cols-3 gap-3 mb-3">
-          <div><label class="label">Mês</label><input id="rpMonth" type="month" class="input py-1" style="min-height:34px"/></div>
-          <div><label class="label">Lavagens</label><input id="rpWashes" type="number" min="0" class="input py-1" style="min-height:34px" placeholder="0"/></div>
-          <div><label class="label">Secagens</label><input id="rpDries" type="number" min="0" class="input py-1" style="min-height:34px" placeholder="0"/></div>
-        </div>
-        <div class="grid grid-cols-3 gap-3 mb-3">
-          <div>
-            <label class="label">Tipo de repasse</label>
-            <select id="rpType" class="select py-1" style="min-height:34px">
-              <option value="fixed">Valor fixo (R$/ciclo)</option>
-              <option value="percent">Percentual (%)</option>
-            </select>
-          </div>
-          <div><label class="label" id="rpValLabel">Valor (R$/ciclo)</label><input id="rpVal" type="number" step="0.01" min="0" class="input py-1" style="min-height:34px" placeholder="2.50" value="${c.cycle_rate||''}"/></div>
-          <div><label class="label">Imposto (%)</label><input id="rpTax" type="number" step="0.01" min="0" class="input py-1" style="min-height:34px" placeholder="32.25" value="${c.tax_rate||''}"/></div>
-        </div>
-        <div class="grid grid-cols-2 gap-3 mb-3">
-          <div><label class="label">Preço da máquina (R$/ciclo) <span class="text-xs text-gray-400">opcional</span></label><input id="rpPrice" type="number" step="0.01" min="0" class="input py-1" style="min-height:34px" placeholder="7.00" value="${c.cycle_price||''}"/></div>
-          <div>
-            <label class="label">Planilha de uso <span class="text-xs text-gray-400">opcional (anexo)</span></label>
-            <input id="rpFile" type="file" accept=".csv,.xlsx,.xls,image/*,application/pdf" class="input py-1" style="min-height:34px;padding:4px"/>
-          </div>
-        </div>
-        <div id="rpResult" style="background:var(--ink-50, #f6f3fa);border-radius:10px;padding:14px;margin-top:10px"></div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-          <button id="rpSaveBtn" class="btn btn-primary" style="width:auto;padding:0 22px;height:36px;min-height:0">💾 Salvar repasse do mês</button>
-        </div>
-        <div id="rpHistory" style="margin-top:14px;font-size:12px;border-top:1px solid var(--ink-100);padding-top:10px"></div>
-      </div>
-
-      <div class="section-title">Próximas visitas</div>
+<div class="section-title">Próximas visitas</div>
       <div class="card" style="padding:10px 14px">${scheduleRows}</div>
 
       <div class="section-title">Entregas recentes</div>
@@ -1572,8 +1574,9 @@ async function openCondoDrawer(id) {
       openCondoDrawer(c.id);
     });
   });
-  // ---------- Módulo Repasse do Mês ----------
+  // ---------- Módulo Repasse (movido para aba dedicada) ----------
   (function setupRepasseModule() {
+    return; // desativado aqui — agora na aba "Repasses"
     const $ = s => drawer.querySelector(s);
     const mIn = $('#rpMonth'), wIn = $('#rpWashes'), dIn = $('#rpDries');
     const tIn = $('#rpType'), vIn = $('#rpVal'), taxIn = $('#rpTax');
@@ -2102,7 +2105,7 @@ async function initGlobe() {
 // globo removido
 
 // ---------- Tabs ----------
-const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos' };
+const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos', repasses:'Repasses' };
 function showTab(tab) {
   document.querySelectorAll('.tab').forEach(a => a.classList.toggle('active', a.dataset.tab===tab));
   const crumb = document.querySelector('#crumbTitle');
@@ -2115,6 +2118,8 @@ function showTab(tab) {
   document.querySelector('#historyMain')?.classList.toggle('hidden', tab!=='history');
   document.querySelector('#implantationsMain')?.classList.toggle('hidden', tab!=='implantations');
   document.querySelector('#deliveriesMain')?.classList.toggle('hidden', tab!=='deliveries');
+  document.querySelector('#repassesMain')?.classList.toggle('hidden', tab!=='repasses');
+  if (tab === 'repasses') loadRepassesPage();
   document.querySelector('#calendarMain')?.classList.toggle('hidden', tab!=='calendar');
   if (tab === 'implantations') loadImplantations();
   if (tab === 'deliveries') loadDeliveries();
@@ -2133,6 +2138,146 @@ function showTab(tab) {
 }
 
 // ---------- Integrations ----------
+// ---------- Aba REPASSES (dedicada) ----------
+let _rpPageCondos = [];
+let _rpPageRepasses = {}; // { condo_id: { month: {...} } }
+
+async function loadRepassesPage() {
+  // Inicializa mês default
+  const mInp = document.querySelector('#rpPageMonth');
+  if (!mInp.value) {
+    const d = new Date(); d.setMonth(d.getMonth()-1);
+    mInp.value = d.toISOString().slice(0,7);
+  }
+  // Carrega condos + repasses existentes (paralelo)
+  _rpPageCondos = await fetch('/api/condominiums').then(r => r.ok?r.json():[]);
+  _rpPageCondos.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  // Fetch de cada repasse do mês
+  const month = mInp.value;
+  const results = await Promise.all(_rpPageCondos.map(c => fetch('/api/condominiums/'+c.id+'/repasse').then(r => r.ok?r.json():[]).then(arr => arr.find(x => x.month === month) || null).catch(()=>null)));
+  _rpPageRepasses = {};
+  _rpPageCondos.forEach((c, i) => { _rpPageRepasses[c.id] = results[i]; });
+  renderRpPage();
+}
+
+function _moneyRp(n) { return 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function renderRpPage(filter='') {
+  const host = document.querySelector('#rpPageList');
+  const f = (filter||'').toLowerCase();
+  const list = _rpPageCondos.filter(c => !f || (c.name||'').toLowerCase().includes(f));
+  host.innerHTML = `
+    <div style="display:grid;grid-template-columns:1.8fr 70px 70px 100px 90px 80px 90px 110px 130px;gap:6px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ink-200);position:sticky;top:0;background:#fff;z-index:1">
+      <div>Condomínio</div>
+      <div>Lav</div><div>Sec</div>
+      <div>Tipo</div><div>Valor</div><div>Imp%</div><div>R$/máq</div>
+      <div>Rep. líq.</div><div style="text-align:right">Líq. Lav.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:3px;margin-top:4px">
+      ${list.map(c => {
+        const r = _rpPageRepasses[c.id] || {};
+        const type = r.type || 'fixed';
+        const val = r.value != null ? r.value : (c.cycle_rate || '');
+        const tax = r.tax_pct != null ? r.tax_pct : (c.tax_rate || '');
+        const price = r.price != null ? r.price : (c.cycle_price || '');
+        return `
+        <div class="rpp-row" data-id="${c.id}" style="display:grid;grid-template-columns:1.8fr 70px 70px 100px 90px 80px 90px 110px 130px;gap:6px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.5);border-radius:6px">
+          <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.name)}">${esc(c.name)}</div>
+          <input class="input rpp-w" type="number" min="0" placeholder="0" value="${r.washes||''}" style="height:30px;font-size:12px;padding:0 6px"/>
+          <input class="input rpp-d" type="number" min="0" placeholder="0" value="${r.dries||''}" style="height:30px;font-size:12px;padding:0 6px"/>
+          <select class="select rpp-t" style="height:30px;font-size:11px;padding:0 4px">
+            <option value="fixed" ${type==='fixed'?'selected':''}>R$/ciclo</option>
+            <option value="percent" ${type==='percent'?'selected':''}>%</option>
+          </select>
+          <input class="input rpp-v" type="number" step="0.01" min="0" placeholder="0" value="${val}" style="height:30px;font-size:12px;padding:0 6px"/>
+          <input class="input rpp-tax" type="number" step="0.01" min="0" placeholder="0" value="${tax}" style="height:30px;font-size:12px;padding:0 6px"/>
+          <input class="input rpp-price" type="number" step="0.01" min="0" placeholder="—" value="${price}" style="height:30px;font-size:12px;padding:0 6px"/>
+          <div class="rpp-liq" style="font-size:13px;font-weight:600;color:var(--brand-700)">${_moneyRp(r.repasse_liquido)}</div>
+          <div class="rpp-lav" style="font-size:13px;font-weight:600;color:#10b981;text-align:right">${r.liquido_lavandery!=null?_moneyRp(r.liquido_lavandery):'—'}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  // Bind
+  host.querySelectorAll('.rpp-row').forEach(row => {
+    const get = s => row.querySelector(s);
+    const recalc = () => {
+      const w = +get('.rpp-w').value||0, d = +get('.rpp-d').value||0;
+      const cycles = w+d;
+      const type = get('.rpp-t').value;
+      const val = +get('.rpp-v').value||0;
+      const tax = (+get('.rpp-tax').value||0)/100;
+      const price = +get('.rpp-price').value||0;
+      const bruto = type==='fixed' ? cycles*val : cycles*price*(val/100);
+      const liq = bruto*(1-tax);
+      const lav = price>0 ? cycles*price - bruto : null;
+      get('.rpp-liq').textContent = _moneyRp(liq);
+      get('.rpp-lav').textContent = lav!=null ? _moneyRp(lav) : '—';
+      updateRpTotals();
+    };
+    row.querySelectorAll('input,select').forEach(el => el.addEventListener('input', recalc));
+  });
+  updateRpTotals();
+}
+
+function updateRpTotals() {
+  let totRep = 0, totLav = 0, withData = 0;
+  document.querySelectorAll('.rpp-row').forEach(row => {
+    const w = +row.querySelector('.rpp-w').value||0;
+    const d = +row.querySelector('.rpp-d').value||0;
+    const cycles = w+d;
+    if (cycles > 0) {
+      withData++;
+      const type = row.querySelector('.rpp-t').value;
+      const val = +row.querySelector('.rpp-v').value||0;
+      const tax = (+row.querySelector('.rpp-tax').value||0)/100;
+      const price = +row.querySelector('.rpp-price').value||0;
+      const bruto = type==='fixed' ? cycles*val : cycles*price*(val/100);
+      totRep += bruto*(1-tax);
+      if (price>0) totLav += cycles*price - bruto;
+    }
+  });
+  document.querySelector('#rpPageTotalRepasse').textContent = _moneyRp(totRep);
+  document.querySelector('#rpPageTotalLav').textContent = _moneyRp(totLav);
+  document.querySelector('#rpPageConfigured').textContent = `${withData}/${_rpPageCondos.length} lançados`;
+}
+
+document.querySelector('#rpPageSearch')?.addEventListener('input', e => renderRpPage(e.target.value));
+document.querySelector('#rpPageMonth')?.addEventListener('change', () => loadRepassesPage());
+
+document.querySelector('#rpPageSaveAll')?.addEventListener('click', async () => {
+  const month = document.querySelector('#rpPageMonth').value;
+  if (!month) { Toast.warning('Escolha o mês'); return; }
+  const btn = document.querySelector('#rpPageSaveAll');
+  const orig = btn.textContent; btn.textContent='Salvando...'; btn.disabled=true;
+  let ok = 0, fail = 0;
+  for (const row of document.querySelectorAll('.rpp-row')) {
+    const w = +row.querySelector('.rpp-w').value||0, d = +row.querySelector('.rpp-d').value||0;
+    if (w+d === 0) continue;
+    const body = {
+      month,
+      washes: w, dries: d,
+      type: row.querySelector('.rpp-t').value,
+      value: +row.querySelector('.rpp-v').value||0,
+      tax: +row.querySelector('.rpp-tax').value||0,
+      price: +row.querySelector('.rpp-price').value||0,
+    };
+    try {
+      const r = await fetch('/api/condominiums/'+row.dataset.id+'/repasse', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (r.ok) ok++; else fail++;
+    } catch { fail++; }
+  }
+  btn.textContent = orig; btn.disabled = false;
+  if (ok) Toast.success(`${ok} repasses salvos${fail?` · ${fail} falharam`:''}`);
+  else Toast.warning('Nenhum lançamento');
+  loadRepassesPage();
+});
+
+document.querySelector('#rpPageReport')?.addEventListener('click', async () => {
+  const month = document.querySelector('#rpPageMonth').value;
+  if (!month) return;
+  window.open('/api/repasses/report.pdf?month=' + month, '_blank');
+});
+
 async function loadIntegrations() {
   // Load masked previews; inputs are empty (don't pre-fill secrets)
   const list = await fetch('/api/integrations').then(r=>r.ok?r.json():[]);

@@ -1729,6 +1729,98 @@ app.post('/api/condominiums/:id/repasse', (req, res) => {
   if (tax_pct > 0) db.prepare('UPDATE condominiums SET tax_rate=? WHERE id=?').run(tax_pct, req.params.id);
   res.json({ ok:true, id, receita, repasse_bruto, imposto, repasse_liquido: repasse_liq, liquido_lavandery: liq_lav });
 });
+// Relatório PDF consolidado de repasses do mês
+app.get('/api/repasses/report.pdf', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const month = req.query.month;
+  if (!month) return res.status(400).json({ error:'missing_month' });
+  const rows = db.prepare(`SELECT cr.*, c.name as condo_name
+    FROM condo_repasse cr
+    LEFT JOIN condominiums c ON c.id=cr.condo_id
+    WHERE cr.month=? ORDER BY c.name`).all(month);
+  try {
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit:'pt', format:'a4', orientation:'landscape' });
+    const W = 842, pad = 30;
+    doc.setFillColor(83,60,157); doc.rect(0,0,W,60,'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+    doc.text('LAVANDERY · Relatório de Repasses', pad, 38);
+    const [y, m] = month.split('-');
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    doc.setFontSize(11); doc.setFont('helvetica','normal');
+    doc.text(`${meses[parseInt(m,10)-1]} / ${y}`, W-pad, 38, { align:'right' });
+
+    doc.setTextColor(40);
+    let yy = 90;
+    const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    // Cabeçalho da tabela
+    doc.setFillColor(246,243,250); doc.rect(pad, yy-14, W-2*pad, 22, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(80);
+    const cols = [
+      { label:'Condomínio', x: pad+4, w: 220 },
+      { label:'Lav', x: pad+226, w: 40, align:'right' },
+      { label:'Sec', x: pad+266, w: 40, align:'right' },
+      { label:'Ciclos', x: pad+306, w: 50, align:'right' },
+      { label:'Tipo', x: pad+360, w: 50 },
+      { label:'Valor', x: pad+414, w: 60, align:'right' },
+      { label:'Imp%', x: pad+478, w: 40, align:'right' },
+      { label:'Rep. Bruto', x: pad+522, w: 70, align:'right' },
+      { label:'Imposto', x: pad+596, w: 60, align:'right' },
+      { label:'Rep. Líq.', x: pad+660, w: 70, align:'right' },
+      { label:'Líq. Lav.', x: pad+734, w: 70, align:'right' },
+    ];
+    for (const c of cols) doc.text(c.label, c.x + (c.align==='right'?c.w:0), yy, { align: c.align||'left' });
+    yy += 18;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+
+    let totalBruto = 0, totalLiq = 0, totalLav = 0, totalImp = 0;
+    for (const r of rows) {
+      if (yy > 540) { doc.addPage({ orientation:'landscape' }); yy = 40; }
+      doc.setDrawColor(230); doc.line(pad, yy+3, W-pad, yy+3);
+      doc.setTextColor(40);
+      const vals = [
+        (r.condo_name||'—').slice(0,40),
+        String(r.washes||0),
+        String(r.dries||0),
+        String((r.washes||0)+(r.dries||0)),
+        r.type==='fixed'?'R$/ciclo':'%',
+        r.type==='fixed'?money(r.value):`${r.value}%`,
+        `${(r.tax_pct||0).toFixed(2)}%`,
+        money(r.repasse_bruto),
+        money(r.imposto),
+        money(r.repasse_liquido),
+        r.liquido_lavandery!=null ? money(r.liquido_lavandery) : '—',
+      ];
+      cols.forEach((c, i) => doc.text(vals[i], c.x + (c.align==='right'?c.w:0), yy, { align: c.align||'left' }));
+      yy += 16;
+      totalBruto += r.repasse_bruto||0; totalLiq += r.repasse_liquido||0; totalLav += r.liquido_lavandery||0; totalImp += r.imposto||0;
+    }
+
+    // Totais
+    yy += 8;
+    doc.setFillColor(246,243,250); doc.rect(pad, yy-12, W-2*pad, 30, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(83,60,157);
+    doc.text('TOTAIS', pad+4, yy+4);
+    doc.text(money(totalBruto), cols[7].x+cols[7].w, yy+4, { align:'right' });
+    doc.text(money(totalImp), cols[8].x+cols[8].w, yy+4, { align:'right' });
+    doc.text(money(totalLiq), cols[9].x+cols[9].w, yy+4, { align:'right' });
+    doc.text(money(totalLav), cols[10].x+cols[10].w, yy+4, { align:'right' });
+
+    // Rodapé
+    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(120);
+    doc.text(`${rows.length} condomínios · Gerado em ${new Date().toLocaleString('pt-BR')}`, pad, 580);
+
+    const buffer = Buffer.from(doc.output('arraybuffer'));
+    res.setHeader('Content-Type','application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="repasses-${month}.pdf"`);
+    res.send(buffer);
+  } catch (e) {
+    console.error('[report]', e);
+    res.status(500).json({ error:'pdf_failed', detail: String(e.message||e) });
+  }
+});
+
 app.delete('/api/condominiums/:id/repasse/:month', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   db.prepare('DELETE FROM condo_repasse WHERE condo_id=? AND month=?').run(req.params.id, req.params.month);
