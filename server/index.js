@@ -1873,6 +1873,102 @@ app.get('/api/repasse/summary', (req, res) => {
   res.json(rows);
 });
 
+// Entrada manual rápida — admin informa condo + mês + lavagens + secagens
+// O sistema calcula tudo (valor/ciclo e imposto configuráveis) e salva em condo_payments
+app.post('/api/repasse/manual', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { condo_id, month, washes, dries, rate, tax_rate } = req.body || {};
+  if (!condo_id || !month) return res.status(400).json({ error: 'missing_fields' });
+  const w = parseInt(washes) || 0, d = parseInt(dries) || 0;
+  const r = parseFloat(rate) || 2.50;
+  const t = (parseFloat(tax_rate) || 32.25) / 100;
+  const cycles = w + d;
+  const gross = cycles * r;
+  const taxAmount = gross * t;
+  const repasse = gross - taxAmount;
+  const payId = `pay_manual_${condo_id}_${month}`;
+  const condo = db.prepare('SELECT name FROM condominiums WHERE id=?').get(condo_id);
+  db.prepare(`INSERT INTO condo_payments (id,condo_id,period,type,amount,reference,note)
+    VALUES (?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET amount=excluded.amount, reference=excluded.reference, note=excluded.note`)
+    .run(payId, condo_id, month, 'repasse', repasse,
+      `R$ ${r.toFixed(2)}/ciclo`,
+      `${cycles} ciclos (${w} lavagens + ${d} secagens) · Bruto R$ ${gross.toFixed(2)} · Imposto ${(t*100).toFixed(2)}% · Repasse líquido`);
+  res.json({ ok:true, condo_name: condo?.name, cycles, gross, tax_amount: taxAmount, repasse, month, payment_id: payId });
+});
+
+// Upload em massa: CSV ou Excel com todas as lavanderias de uma vez
+// Colunas esperadas: condominio, mes, lavagens, secagens (ou ciclos)
+app.post('/api/repasse/bulk', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const { rows, rate, tax_rate } = req.body || {};
+    if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'no_rows' });
+    const r = parseFloat(rate) || 2.50;
+    const t = (parseFloat(tax_rate) || 32.25) / 100;
+
+    const condos = db.prepare('SELECT id, name FROM condominiums').all();
+    const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    function matchCondo(name) {
+      const q = norm(name); if (!q) return null;
+      let best = null, bs = 0;
+      for (const c of condos) {
+        const n = norm(c.name); if (!n) continue;
+        if (q.includes(n) || n.includes(q)) {
+          const s = Math.min(q.length, n.length) / Math.max(q.length, n.length);
+          if (s > bs) { bs = s; best = c; }
+        }
+      }
+      return bs > 0.4 ? best : null;
+    }
+    function normalizeMonth(s) {
+      if (!s) return null;
+      const str = String(s).trim();
+      let m = str.match(/(\d{4})-(\d{1,2})/);
+      if (m) return `${m[1]}-${m[2].padStart(2,'0')}`;
+      m = str.match(/(\d{1,2})\/(\d{4})/);
+      if (m) return `${m[2]}-${m[1].padStart(2,'0')}`;
+      m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (m) return `${m[3]}-${m[2].padStart(2,'0')}`;
+      const meses = { janeiro:'01',fevereiro:'02',marco:'03','março':'03',abril:'04',maio:'05',junho:'06',julho:'07',agosto:'08',setembro:'09',outubro:'10',novembro:'11',dezembro:'12' };
+      m = str.toLowerCase().match(/([a-zçãéêíôú]{3,})[\s/]+(\d{2,4})/);
+      if (m && meses[m[1]]) { const y = m[2].length===2?`20${m[2]}`:m[2]; return `${y}-${meses[m[1]]}`; }
+      return null;
+    }
+
+    const upsert = db.prepare(`INSERT INTO condo_payments (id,condo_id,period,type,amount,reference,note)
+      VALUES (?,?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET amount=excluded.amount, reference=excluded.reference, note=excluded.note`);
+    const results = [];
+    for (const row of rows) {
+      const condoName = row.condominio || row.condo || row.condomínio || row.nome;
+      const monthStr = row.mes || row.mês || row.month || row.periodo || row.período;
+      const w = parseInt(row.lavagens || row.lavagem || row.washes || 0) || 0;
+      const d = parseInt(row.secagens || row.secagem || row.dries || 0) || 0;
+      const cyclesExplicit = parseInt(row.ciclos || row.cycles || 0) || 0;
+      const matched = matchCondo(condoName);
+      const month = normalizeMonth(monthStr);
+      if (!matched) { results.push({ condoName, monthStr, ok:false, reason:'no_condo_match' }); continue; }
+      if (!month) { results.push({ condoName, monthStr, ok:false, reason:'invalid_month' }); continue; }
+      const cycles = (w + d) || cyclesExplicit;
+      if (!cycles) { results.push({ condoName, monthStr, ok:false, reason:'no_cycles' }); continue; }
+      const gross = cycles * r;
+      const taxAmount = gross * t;
+      const repasse = gross - taxAmount;
+      const payId = `pay_bulk_${matched.id}_${month}`;
+      upsert.run(payId, matched.id, month, 'repasse', repasse, `R$ ${r.toFixed(2)}/ciclo`,
+        `${cycles} ciclos (${w} lavagens + ${d} secagens) · Bruto R$ ${gross.toFixed(2)} · Imposto ${(t*100).toFixed(2)}% · Repasse líquido`);
+      results.push({ condoName, condo_id: matched.id, condo_name: matched.name, month, cycles, gross, repasse, ok:true });
+    }
+    const okCount = results.filter(x => x.ok).length;
+    const failCount = results.length - okCount;
+    res.json({ ok:true, total: results.length, processed: okCount, failed: failCount, results });
+  } catch (e) {
+    console.error('[bulk]', e);
+    res.status(500).json({ error: 'bulk_failed', detail: String(e.message||e) });
+  }
+});
+
 // RELATÓRIO MENSAL: importa modelo "Relatório – Mês/Ano – Condo" da planilha
 // Aceita URL completa (usa o gid informado ou o default) ou apenas sheetId+gid
 app.post('/api/repasse/monthly-import', async (req, res) => {

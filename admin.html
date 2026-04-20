@@ -456,29 +456,40 @@
 
 <main class="page hidden" id="repasseMain">
   <div class="page-header">
-    <div class="page-title"><h1>Repasse Inteligente</h1><p>Cole o link do Google Sheets com os repasses — o sistema lê, classifica e calcula tudo.</p></div>
+    <div class="page-title"><h1>Repasse Inteligente</h1><p>Informe só os ciclos — o sistema calcula o repasse e gera o PDF pra cada condomínio.</p></div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <label style="font-size:12px;color:var(--ink-600)">R$/ciclo <input id="rpGlobalRate" type="number" step="0.01" value="2.50" class="input" style="width:90px;height:34px"/></label>
+      <label style="font-size:12px;color:var(--ink-600)">Imposto % <input id="rpGlobalTax" type="number" step="0.01" value="32.25" class="input" style="width:80px;height:34px"/></label>
+    </div>
   </div>
 
-  <!-- Modo rápido: importar relatório mensal (modelo enviado aos condomínios) -->
+  <!-- MODO 1: Upload CSV/Excel com todos os condomínios -->
   <section class="card-new" style="margin-bottom:16px;border-left:3px solid var(--brand-600)">
     <div class="card-header">
-      <div><div class="card-title">📄 Importar relatório mensal</div><div class="subtle" style="font-size:12px;margin-top:2px">Cole a URL da aba que você envia ao condomínio (com #gid=N). O sistema lê os ciclos, calcula tudo e gera o PDF de repasse.</div></div>
+      <div><div class="card-title">📁 Upload de planilha (todos os condomínios de uma vez)</div><div class="subtle" style="font-size:12px;margin-top:2px">Arraste ou selecione um arquivo CSV/XLSX. Colunas: <b>condominio, mes, lavagens, secagens</b> (ou <b>ciclos</b>).</div></div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-      <input id="mrUrl" class="input" placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=12345" style="flex:1;height:42px"/>
-      <button id="mrInspectBtn" class="btn-new ghost" style="white-space:nowrap">👁 Prévia</button>
-      <button id="mrImportBtn" class="btn-new brand" style="white-space:nowrap">⚙️ Importar e salvar</button>
+    <div id="rpDrop" style="border:2px dashed var(--ink-200);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .2s">
+      <input type="file" id="rpFile" accept=".csv,.xlsx,.xls" style="display:none"/>
+      <div style="font-size:36px;margin-bottom:8px">📤</div>
+      <div style="font-weight:500;font-size:14px">Arraste o arquivo aqui ou <span style="color:var(--brand-700);text-decoration:underline">clique pra selecionar</span></div>
+      <div class="subtle" style="font-size:11px;margin-top:6px">Aceita CSV e Excel (.xlsx, .xls). <a href="#" id="rpSample" style="color:var(--brand-700)">Baixar modelo</a></div>
     </div>
-    <div id="mrResult" style="font-size:13px"></div>
+    <div id="rpBulkResult" style="margin-top:14px"></div>
   </section>
 
+  <!-- MODO 2: Entrada manual rápida -->
   <section class="card-new" style="margin-bottom:16px">
-    <div class="card-header"><div><div class="card-title">Modo avançado — consolidado multi-condomínio</div><div class="subtle" style="font-size:12px">Para planilhas com várias abas (1 por condo). Usa classificação automática.</div></div></div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input id="rpsUrl" class="input" placeholder="https://docs.google.com/spreadsheets/d/..." style="flex:1;height:42px"/>
-      <button id="rpsInspectBtn" class="btn-new brand" style="white-space:nowrap">🔍 Inspecionar</button>
+    <div class="card-header">
+      <div><div class="card-title">✍️ Entrada manual (um por vez)</div><div class="subtle" style="font-size:12px">Escolha o condomínio, mês e informe os ciclos. O sistema calcula.</div></div>
     </div>
-    <p class="subtle" style="font-size:12px;margin-top:8px">A planilha precisa estar como "Qualquer pessoa com o link pode ler".</p>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end">
+      <div><label style="font-size:11px;color:var(--ink-500)">Condomínio</label><select id="mqCondo" class="input" style="height:42px"></select></div>
+      <div><label style="font-size:11px;color:var(--ink-500)">Mês (YYYY-MM)</label><input id="mqMonth" class="input" type="month" style="height:42px"/></div>
+      <div><label style="font-size:11px;color:var(--ink-500)">Lavagens</label><input id="mqWashes" class="input" type="number" min="0" value="0" style="height:42px"/></div>
+      <div><label style="font-size:11px;color:var(--ink-500)">Secagens</label><input id="mqDries" class="input" type="number" min="0" value="0" style="height:42px"/></div>
+      <button id="mqSaveBtn" class="btn-new brand" style="height:42px;white-space:nowrap">💾 Salvar</button>
+    </div>
+    <div id="mqResult" style="margin-top:12px"></div>
   </section>
 
   <section class="card-new" id="rpsTabsCard" style="margin-bottom:16px;display:none">
@@ -2048,6 +2059,127 @@ function showTab(tab) {
   if (tab === 'history') loadHistory();
   if (tab === 'integrations') { loadIntegrations(); startWaPoll(); } else { stopWaPoll?.(); }
 }
+
+// ---------- REPASSE: entrada manual + upload em massa ----------
+// Popula dropdown de condomínios ao abrir aba
+async function loadCondoDropdowns() {
+  try {
+    const condos = await fetch('/api/condominiums').then(r => r.ok?r.json():[]);
+    const sel = document.querySelector('#mqCondo');
+    if (sel && !sel._loaded) {
+      sel.innerHTML = '<option value="">— selecione —</option>' + condos.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      sel._loaded = true;
+    }
+  } catch {}
+}
+const _origLoadRpsSummary = typeof loadRpsSummary === 'function' ? loadRpsSummary : null;
+async function loadRepasseSummary() { loadCondoDropdowns(); if (_origLoadRpsSummary) _origLoadRpsSummary(); }
+
+// Entrada manual
+document.querySelector('#mqSaveBtn')?.addEventListener('click', async () => {
+  const condo_id = document.querySelector('#mqCondo').value;
+  const month = document.querySelector('#mqMonth').value;
+  const washes = document.querySelector('#mqWashes').value;
+  const dries = document.querySelector('#mqDries').value;
+  const rate = document.querySelector('#rpGlobalRate').value;
+  const tax_rate = document.querySelector('#rpGlobalTax').value;
+  if (!condo_id) { Toast.warning('Selecione o condomínio'); return; }
+  if (!month) { Toast.warning('Informe o mês'); return; }
+  try {
+    const r = await fetch('/api/repasse/manual', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ condo_id, month, washes, dries, rate, tax_rate }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || d.error);
+    const money = n => 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.querySelector('#mqResult').innerHTML = `
+      <div style="background:var(--ink-50);border-radius:10px;padding:12px;font-size:13px">
+        <b>${esc(d.condo_name)}</b> · ${d.month} · ${d.cycles} ciclos<br>
+        Bruto ${money(d.gross)} · Imposto ${money(d.tax_amount)} · <b style="color:var(--brand-700)">Repasse ${money(d.repasse)}</b>
+        &nbsp;&nbsp;<a class="btn-new ghost sm" target="_blank" href="/api/repasse/monthly-pdf?condo_id=${d.condo_id || condo_id}&month=${d.month}" style="font-size:11px;padding:0 10px;height:28px;display:inline-flex;align-items:center">📥 PDF</a>
+      </div>`;
+    Toast.success('Repasse salvo — o condomínio já vê no portal');
+    document.querySelector('#mqWashes').value = 0;
+    document.querySelector('#mqDries').value = 0;
+  } catch (e) { Toast.error('Erro: ' + e.message); }
+});
+
+// Upload CSV/Excel
+async function parseUploadedFile(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'csv') {
+    const text = await file.text();
+    return csvToObjects(text);
+  }
+  // Excel via SheetJS CDN
+  if (!window.XLSX) {
+    await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  }
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { defval: '' });
+}
+function csvToObjects(text) {
+  const parse = (t) => {
+    const rows = [], re = /("((?:[^"]|"")*)"|([^,\r\n]*))(,|\r?\n|$)/g;
+    let row = [], m;
+    while ((m = re.exec(t))) {
+      row.push(m[2] !== undefined ? m[2].replace(/""/g,'"') : (m[3] || ''));
+      if (m[4] === ',') continue;
+      rows.push(row); row = [];
+      if (m[4] === '' && m.index + m[0].length >= t.length) break;
+    }
+    return rows.filter(r => r.some(c => c.trim()));
+  };
+  const rows = parse(text);
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+  return rows.slice(1).map(r => Object.fromEntries(headers.map((h, i) => [h, (r[i]||'').trim()])));
+}
+async function handleUpload(file) {
+  const rate = document.querySelector('#rpGlobalRate').value;
+  const tax_rate = document.querySelector('#rpGlobalTax').value;
+  try {
+    const rows = await parseUploadedFile(file);
+    if (!rows.length) { Toast.warning('Arquivo vazio'); return; }
+    const r = await fetch('/api/repasse/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rows, rate, tax_rate }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || d.error);
+    const money = n => 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const okRows = d.results.filter(x => x.ok);
+    const totalRepasse = okRows.reduce((s,x)=>s+(x.repasse||0), 0);
+    const summary = `<div style="margin-bottom:12px;padding:12px;background:var(--brand-50);border-radius:10px;font-size:13px"><b>${d.processed} salvos</b> de ${d.total} linhas · ${d.failed} falharam · <b style="color:var(--brand-700)">Total repassado: ${money(totalRepasse)}</b></div>`;
+    const table = `<div style="max-height:400px;overflow-y:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead style="background:var(--ink-50);position:sticky;top:0"><tr>
+        <th style="text-align:left;padding:8px">Entrada</th><th style="text-align:left;padding:8px">Condomínio</th>
+        <th style="text-align:right;padding:8px">Mês</th><th style="text-align:right;padding:8px">Ciclos</th>
+        <th style="text-align:right;padding:8px">Repasse</th><th style="text-align:left;padding:8px">Status</th>
+      </tr></thead>
+      <tbody>${d.results.map(x => `<tr style="border-top:1px solid var(--ink-100)">
+        <td style="padding:6px 8px">${esc(x.condoName||'—')}</td>
+        <td style="padding:6px 8px">${esc(x.condo_name||'—')}</td>
+        <td style="padding:6px 8px;text-align:right">${x.month||'—'}</td>
+        <td style="padding:6px 8px;text-align:right">${x.cycles||'—'}</td>
+        <td style="padding:6px 8px;text-align:right">${x.repasse?money(x.repasse):'—'}</td>
+        <td style="padding:6px 8px">${x.ok?'<span class="pill" style="background:#d1fae5;color:#065f46">✓</span>':'<span class="pill" style="background:#fee2e2;color:#991b1b">'+x.reason+'</span>'}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+    document.querySelector('#rpBulkResult').innerHTML = summary + table;
+    Toast.success(`${d.processed}/${d.total} processados`);
+  } catch (e) { Toast.error('Erro: ' + e.message); }
+}
+const rpDrop = document.querySelector('#rpDrop');
+rpDrop?.addEventListener('click', () => document.querySelector('#rpFile').click());
+document.querySelector('#rpFile')?.addEventListener('change', (e) => e.target.files[0] && handleUpload(e.target.files[0]));
+['dragover','dragenter'].forEach(ev => rpDrop?.addEventListener(ev, e => { e.preventDefault(); rpDrop.style.background='var(--brand-50)'; rpDrop.style.borderColor='var(--brand-500)'; }));
+['dragleave','drop'].forEach(ev => rpDrop?.addEventListener(ev, e => { e.preventDefault(); rpDrop.style.background=''; rpDrop.style.borderColor=''; }));
+rpDrop?.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files[0]) handleUpload(e.dataTransfer.files[0]); });
+
+// Modelo CSV de exemplo
+document.querySelector('#rpSample')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  const csv = 'condominio,mes,lavagens,secagens\nCondomínio Max Carneiros,2026-04,718,458\nCondomínio Aplauso Jabaquara,2026-04,530,410\n';
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'modelo-repasse-lavandery.csv'; a.click();
+});
 
 // ---------- REPASSE: modo rápido (relatório mensal por condo) ----------
 async function mrCall(dryRun) {
