@@ -120,7 +120,104 @@ export function classifyTab(tab, rows, forcedNames = []) {
   return { valid: false, reason: 'no_match' };
 }
 
-// ---------- Parser de aba de condomínio ----------
+// ---------- Parser Template "Relatório Mensal" (novo modelo Lavandery) ----------
+// Detecta: cabeçalho "Relatório – Mês/Ano – NomeCondo" + tabela de transações (MAQUINA, USUARIO, DATA)
+export function parseMonthlyReport(rows) {
+  // 1. Header info
+  let title = null, month = null, condoNameFromTitle = null;
+  for (let i = 0; i < Math.min(rows.length, 6); i++) {
+    const cell = (rows[i][0] || '').trim();
+    if (/relat[óo]rio/i.test(cell)) {
+      title = cell;
+      const mm = cell.match(/(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-zçãéêíôú]*[\/\s-]+(\d{4})/i);
+      if (mm) {
+        const meses = { jan:'01',fev:'02',mar:'03',abr:'04',mai:'05',jun:'06',jul:'07',ago:'08',set:'09',out:'10',nov:'11',dez:'12' };
+        month = `${mm[2]}-${meses[mm[1].slice(0,3).toLowerCase()]}`;
+      }
+      const condoMatch = cell.split(/[–-]/).map(s=>s.trim()).filter(Boolean);
+      if (condoMatch.length >= 3) condoNameFromTitle = condoMatch[condoMatch.length-1];
+      break;
+    }
+  }
+
+  // 2. Valores do resumo
+  let reimbursePerCycle = null, taxRate = null;
+  for (const r of rows.slice(0, 30)) {
+    const line = r.join('|').toLowerCase();
+    if (/reembolso.*ciclo|valor.*ciclo|por ciclo/i.test(line) && reimbursePerCycle == null) {
+      for (const c of r) {
+        const n = parseBRNumber(c);
+        if (n != null && n > 0.5 && n < 50) { reimbursePerCycle = n; break; }
+      }
+    }
+    if (/icms|imposto|cofins|iss/i.test(line) && taxRate == null) {
+      for (const c of r) {
+        if (/%/.test(c)) { const n = parseBRNumber(c.replace('%','')); if (n != null && n > 5 && n < 60) { taxRate = n; break; } }
+      }
+    }
+  }
+
+  // 3. Transações — procura header "MAQUINA | USUARIO | DATA"
+  let dataStart = -1, cm = {};
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r.length) continue;
+    const joined = r.join('|').toLowerCase();
+    if (/m[áa]quina/.test(joined) && /usu[áa]rio/.test(joined) && /data/.test(joined)) {
+      dataStart = i + 1;
+      r.forEach((h, idx) => {
+        const lh = (h||'').toLowerCase();
+        if (/m[áa]quina/.test(lh)) cm.machine = idx;
+        else if (/usu[áa]rio/.test(lh)) cm.user = idx;
+        else if (/data/.test(lh)) cm.date = idx;
+      });
+      break;
+    }
+  }
+
+  const transactions = [];
+  let washes = 0, dries = 0;
+  if (dataStart >= 0) {
+    for (let i = dataStart; i < rows.length; i++) {
+      const r = rows[i];
+      const machine = (r[cm.machine]||'').trim();
+      if (!machine) continue;
+      const user = (r[cm.user]||'').trim();
+      const date = (r[cm.date]||'').trim();
+      const isLavadora = /lavadora/i.test(machine);
+      const isSecadora = /secadora/i.test(machine);
+      if (!isLavadora && !isSecadora) continue;
+      transactions.push({ machine, user, date, type: isLavadora ? 'lavagem' : 'secagem' });
+      if (isLavadora) washes++; else dries++;
+    }
+  }
+
+  return {
+    title, month, condoNameFromTitle,
+    reimbursePerCycle: reimbursePerCycle || 2.50,
+    taxRate: taxRate || 32.25,
+    washes, dries,
+    cycles: washes + dries,
+    transactions,
+  };
+}
+
+// Calcula valores financeiros de um relatório mensal
+export function calcMonthlyReport(parsed) {
+  const rate = parsed.reimbursePerCycle || 2.50;
+  const tax = (parsed.taxRate || 32.25) / 100;
+  const washValue = parsed.washes * rate;
+  const dryValue = parsed.dries * rate;
+  const gross = washValue + dryValue;
+  const taxAmount = gross * tax;
+  const repasse = gross - taxAmount;
+  return {
+    ...parsed,
+    washValue, dryValue, gross, taxAmount, repasse,
+  };
+}
+
+// ---------- Parser de aba de condomínio (modelo antigo consolidado) ----------
 // Tenta detectar linha de cabeçalho e extrair dados mensais
 export function parseCondoTab(rows) {
   // Encontra a linha de header: contém "MÊS" ou "MES" + pelo menos uma keyword financeira

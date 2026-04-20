@@ -459,7 +459,21 @@
     <div class="page-title"><h1>Repasse Inteligente</h1><p>Cole o link do Google Sheets com os repasses — o sistema lê, classifica e calcula tudo.</p></div>
   </div>
 
+  <!-- Modo rápido: importar relatório mensal (modelo enviado aos condomínios) -->
+  <section class="card-new" style="margin-bottom:16px;border-left:3px solid var(--brand-600)">
+    <div class="card-header">
+      <div><div class="card-title">📄 Importar relatório mensal</div><div class="subtle" style="font-size:12px;margin-top:2px">Cole a URL da aba que você envia ao condomínio (com #gid=N). O sistema lê os ciclos, calcula tudo e gera o PDF de repasse.</div></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <input id="mrUrl" class="input" placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=12345" style="flex:1;height:42px"/>
+      <button id="mrInspectBtn" class="btn-new ghost" style="white-space:nowrap">👁 Prévia</button>
+      <button id="mrImportBtn" class="btn-new brand" style="white-space:nowrap">⚙️ Importar e salvar</button>
+    </div>
+    <div id="mrResult" style="font-size:13px"></div>
+  </section>
+
   <section class="card-new" style="margin-bottom:16px">
+    <div class="card-header"><div><div class="card-title">Modo avançado — consolidado multi-condomínio</div><div class="subtle" style="font-size:12px">Para planilhas com várias abas (1 por condo). Usa classificação automática.</div></div></div>
     <div style="display:flex;gap:8px;align-items:center">
       <input id="rpsUrl" class="input" placeholder="https://docs.google.com/spreadsheets/d/..." style="flex:1;height:42px"/>
       <button id="rpsInspectBtn" class="btn-new brand" style="white-space:nowrap">🔍 Inspecionar</button>
@@ -2035,7 +2049,61 @@ function showTab(tab) {
   if (tab === 'integrations') { loadIntegrations(); startWaPoll(); } else { stopWaPoll?.(); }
 }
 
-// ---------- REPASSE INTELIGENTE ----------
+// ---------- REPASSE: modo rápido (relatório mensal por condo) ----------
+async function mrCall(dryRun) {
+  const url = document.querySelector('#mrUrl').value.trim();
+  if (!url) { Toast.warning('Cole o link'); return null; }
+  const body = { url };
+  if (dryRun) body.dry_run = true;
+  const r = await fetch('/api/repasse/monthly-import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  return { ok: r.ok, data: await r.json() };
+}
+function mrRender(d, isPreview) {
+  const money = n => 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const p = d.parsed || d;
+  const condoMatchedLine = d.matched_condo_id || d.condo_id ? `✓ Vinculado ao condomínio` : `⚠ Nenhum condomínio bateu (título: ${p.condoNameFromTitle || '—'})`;
+  document.querySelector('#mrResult').innerHTML = `
+    <div style="background:var(--ink-50);border-radius:10px;padding:14px;margin-top:8px">
+      <div style="font-weight:600;margin-bottom:8px">${isPreview?'Prévia':'Importado'} — ${p.title || '(sem título)'}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;font-size:13px">
+        <div><div class="subtle" style="font-size:11px">Mês</div><b>${p.month || '—'}</b></div>
+        <div><div class="subtle" style="font-size:11px">Lavagens</div><b>${p.washes}</b></div>
+        <div><div class="subtle" style="font-size:11px">Secagens</div><b>${p.dries}</b></div>
+        <div><div class="subtle" style="font-size:11px">Ciclos totais</div><b>${p.cycles}</b></div>
+        <div><div class="subtle" style="font-size:11px">R$/ciclo</div><b>${money(p.reimbursePerCycle)}</b></div>
+        <div><div class="subtle" style="font-size:11px">Valor bruto</div><b>${money(p.gross)}</b></div>
+        <div><div class="subtle" style="font-size:11px">Imposto (${p.taxRate||p.tax_rate}%)</div><b>${money(p.taxAmount || p.tax_amount)}</b></div>
+        <div><div class="subtle" style="font-size:11px;color:var(--brand-700)">REPASSE</div><b style="color:var(--brand-700)">${money(p.repasse)}</b></div>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--ink-600)">${condoMatchedLine}</div>
+      ${!isPreview && d.condo_id ? `<div style="margin-top:12px;display:flex;gap:8px"><a class="btn-new brand" target="_blank" href="/api/repasse/monthly-pdf?condo_id=${d.condo_id}&month=${d.month}">📥 Baixar PDF</a></div>` : ''}
+    </div>`;
+}
+document.querySelector('#mrInspectBtn')?.addEventListener('click', async () => {
+  const btn = event.currentTarget; const orig = btn.textContent; btn.textContent = 'Lendo...'; btn.disabled = true;
+  try {
+    const r = await mrCall(true);
+    if (!r?.ok) throw new Error(r?.data?.detail || r?.data?.error || 'erro');
+    mrRender(r.data, true);
+  } catch(e) { Toast.error('Erro: ' + e.message); }
+  btn.textContent = orig; btn.disabled = false;
+});
+document.querySelector('#mrImportBtn')?.addEventListener('click', async () => {
+  const btn = event.currentTarget; const orig = btn.textContent; btn.textContent = 'Processando...'; btn.disabled = true;
+  try {
+    const r = await mrCall(false);
+    if (!r?.ok) {
+      if (r?.data?.error === 'no_condo_match') { Toast.warning('Não achei o condomínio. Título: "'+(r.data.suggestion||'?')+'"'); mrRender(r.data, true); }
+      else throw new Error(r?.data?.detail || r?.data?.error || 'erro');
+    } else {
+      mrRender(r.data, false);
+      Toast.success('Repasse de ' + r.data.month + ' salvo · o condomínio já vê no portal');
+    }
+  } catch(e) { Toast.error('Erro: ' + e.message); }
+  btn.textContent = orig; btn.disabled = false;
+});
+
+// ---------- REPASSE INTELIGENTE (modo avançado multi-condo) ----------
 let _rpsInspected = null;
 document.querySelector('#rpsInspectBtn')?.addEventListener('click', async () => {
   const url = document.querySelector('#rpsUrl').value.trim();

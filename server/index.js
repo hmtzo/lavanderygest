@@ -13,7 +13,7 @@ import { waStatus, waConnect, waDisconnect, waSendText, waAutoStart } from './wh
 import { gmapsTest, gmapsGeocode, gmapsRoute, s3Test, s3PresignUpload, s3PutObject, asaasTest, asaasCreateCustomer, asaasCreateCharge, asaasListCharges, sentryInit, sentryCapture, sentryTest } from './integrations-services.js';
 import { firebaseTest, firebaseUpload } from './firebase.js';
 import { driveTest, driveUpload } from './gdrive.js';
-import { extractSheetId, listTabs, fetchTabCsv, parseCsv, classifyTab, parseCondoTab, calculateRepasse, validateCalc, detectModel } from './repasse.js';
+import { extractSheetId, listTabs, fetchTabCsv, parseCsv, classifyTab, parseCondoTab, calculateRepasse, validateCalc, detectModel, parseMonthlyReport, calcMonthlyReport } from './repasse.js';
 import { generateDeliveryReceipt, generateSurveyChecklist, generateInstallationReport, generateEquipmentDeliveryTerm } from './pdf-templates.js';
 import { setupAuth, authMiddleware, requireAuth, authRoutes, publicMiddleware, PUBLIC_PATHS } from './auth.js';
 import { fetchCalendars } from './calendar.js';
@@ -1871,6 +1871,159 @@ app.get('/api/repasse/summary', (req, res) => {
     FROM repasse_condos rc LEFT JOIN condominiums c ON c.id=rc.condo_id
     ORDER BY rc.last_import_at DESC`).all();
   res.json(rows);
+});
+
+// RELATÓRIO MENSAL: importa modelo "Relatório – Mês/Ano – Condo" da planilha
+// Aceita URL completa (usa o gid informado ou o default) ou apenas sheetId+gid
+app.post('/api/repasse/monthly-import', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const { url, condo_id, month_override, dry_run } = req.body || {};
+    const sheetId = extractSheetId(url);
+    if (!sheetId) return res.status(400).json({ error: 'invalid_url' });
+    // Extrai gid da URL (depois de # ou ?)
+    const gidMatch = String(url).match(/[?#&]gid=(\d+)/);
+    const gid = gidMatch ? gidMatch[1] : '0';
+
+    const csv = await fetchTabCsv(sheetId, gid);
+    const rows = parseCsv(csv);
+    const parsed = parseMonthlyReport(rows);
+    if (!parsed.cycles) return res.status(400).json({ error: 'no_transactions_found', parsed });
+
+    const calc = calcMonthlyReport(parsed);
+    const month = month_override || calc.month;
+
+    // Tenta auto-match se não veio condo_id
+    let targetCondoId = condo_id;
+    if (!targetCondoId && calc.condoNameFromTitle) {
+      const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+      const t = norm(calc.condoNameFromTitle);
+      const candidates = db.prepare('SELECT id, name FROM condominiums').all();
+      let best = null, bestScore = 0;
+      for (const c of candidates) {
+        const n = norm(c.name);
+        if (!n) continue;
+        if (t.includes(n) || n.includes(t)) {
+          const s = Math.min(t.length, n.length) / Math.max(t.length, n.length);
+          if (s > bestScore) { bestScore = s; best = c; }
+        }
+      }
+      if (bestScore > 0.4) targetCondoId = best?.id;
+    }
+
+    if (dry_run) return res.json({ ok: true, dry_run: true, parsed: { ...calc, transactions: calc.transactions.slice(0,5) }, matched_condo_id: targetCondoId });
+
+    if (!targetCondoId) return res.status(400).json({ error: 'no_condo_match', suggestion: calc.condoNameFromTitle });
+    if (!month) return res.status(400).json({ error: 'no_month' });
+
+    const condo = db.prepare('SELECT name FROM condominiums WHERE id=?').get(targetCondoId);
+
+    // Upsert payment
+    const payId = `pay_monthly_${targetCondoId}_${month}`;
+    const note = `${calc.cycles} ciclos (${calc.washes} lavagens + ${calc.dries} secagens) · Bruto R$ ${calc.gross.toFixed(2)} · Imposto ${calc.taxRate}% · Repasse líquido`;
+    db.prepare(`INSERT INTO condo_payments (id,condo_id,period,type,amount,reference,note)
+      VALUES (?,?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET amount=excluded.amount, note=excluded.note, reference=excluded.reference`)
+      .run(payId, targetCondoId, month, 'repasse', calc.repasse, `R$ ${calc.reimbursePerCycle.toFixed(2)}/ciclo`, note);
+
+    res.json({
+      ok: true, month, condo_id: targetCondoId, condo_name: condo?.name,
+      washes: calc.washes, dries: calc.dries, cycles: calc.cycles,
+      gross: calc.gross, tax_amount: calc.taxAmount, repasse: calc.repasse,
+      reimburse_per_cycle: calc.reimbursePerCycle, tax_rate: calc.taxRate,
+      payment_id: payId,
+    });
+  } catch (e) {
+    console.error('[monthly-import]', e);
+    res.status(500).json({ error: 'import_failed', detail: String(e.message||e) });
+  }
+});
+
+// Gera PDF do relatório mensal (mesmo visual do template enviado aos condomínios)
+app.get('/api/repasse/monthly-pdf', async (req, res) => {
+  if (!req.user || !['admin','gestor','condo'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const { condo_id, month } = req.query;
+    const targetCondoId = req.user.role === 'condo' ? req.user.condo_id : condo_id;
+    if (!targetCondoId || !month) return res.status(400).json({ error: 'missing' });
+    const pay = db.prepare('SELECT * FROM condo_payments WHERE condo_id=? AND period=? AND type=? ORDER BY created_at DESC LIMIT 1').get(targetCondoId, month, 'repasse');
+    if (!pay) return res.status(404).json({ error: 'not_found' });
+    const condo = db.prepare('SELECT name, address FROM condominiums WHERE id=?').get(targetCondoId);
+
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const W = 595, pad = 40;
+    // Cabeçalho
+    doc.setFillColor(83, 60, 157); doc.rect(0, 0, W, 80, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(22);
+    doc.text('LAVANDERY', pad, 45);
+    doc.setFontSize(11); doc.setFont('helvetica','normal');
+    doc.text('Relatório de Repasse Mensal', pad, 62);
+
+    doc.setTextColor(30);
+    doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    const [yr, mo] = month.split('-');
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    doc.text(`${meses[parseInt(mo,10)-1]} / ${yr}`, pad, 115);
+    doc.setFontSize(13); doc.setFont('helvetica','normal'); doc.setTextColor(80);
+    doc.text(condo?.name || '—', pad, 135);
+    if (condo?.address) doc.text(condo.address, pad, 152);
+
+    // Linha separadora
+    doc.setDrawColor(200); doc.line(pad, 175, W-pad, 175);
+
+    // Parseia note pra extrair washes/dries/cycles
+    const m = (pay.note || '').match(/(\d+)\s*ciclos.*?\((\d+)\s*lavagens.*?(\d+)\s*secagens\).*?Bruto\s*R\$?\s*([\d.,]+).*?Imposto\s*([\d.,]+)%/i);
+    const cycles = m ? parseInt(m[1]) : 0;
+    const washes = m ? parseInt(m[2]) : 0;
+    const dries = m ? parseInt(m[3]) : 0;
+    const gross = m ? parseFloat(m[4].replace(/\./g,'').replace(',','.')) : 0;
+    const taxRate = m ? parseFloat(m[5].replace(',','.')) : 32.25;
+    const taxAmount = gross - pay.amount;
+    const rate = (pay.reference||'').match(/([\d,]+)/)?.[1]?.replace(',','.') || '2.50';
+
+    let y = 210;
+    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(30);
+    doc.text('Resumo do mês', pad, y); y += 20;
+
+    const money = n => 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const rows = [
+      ['Total de ciclos de lavagem', `${washes}`, money(washes * parseFloat(rate))],
+      ['Total de ciclos de secagem', `${dries}`, money(dries * parseFloat(rate))],
+      ['Reembolso por ciclo', '', `R$ ${rate}`],
+      ['VALOR BRUTO', '', money(gross)],
+      ['ICMS, PIS, COFINS, ISS, Taxa de cartão', `${taxRate}%`, money(taxAmount)],
+      ['TOTAL REPASSE', '', money(pay.amount)],
+    ];
+    doc.setFontSize(11); doc.setFont('helvetica','normal'); doc.setTextColor(60);
+    for (const [a, b, c] of rows) {
+      const isTotal = a.startsWith('TOTAL') || a === 'VALOR BRUTO';
+      if (isTotal) { doc.setFont('helvetica','bold'); doc.setTextColor(83, 60, 157); doc.setFillColor(245,240,255); doc.rect(pad-4, y-14, W-2*pad+8, 22, 'F'); }
+      else { doc.setFont('helvetica','normal'); doc.setTextColor(60); }
+      doc.text(a, pad, y);
+      if (b) doc.text(String(b), 350, y);
+      doc.text(String(c), W-pad, y, { align: 'right' });
+      y += 24;
+    }
+
+    y += 20;
+    doc.setFont('helvetica','italic'); doc.setFontSize(10); doc.setTextColor(120);
+    doc.text(`Total de ${cycles} ciclos processados durante ${meses[parseInt(mo,10)-1]}/${yr}.`, pad, y);
+    doc.text(`Após dedução de impostos (${taxRate}% sobre valor bruto), o valor de repasse líquido é de ${money(pay.amount)}.`, pad, y+15);
+
+    // Rodapé
+    doc.setFontSize(9); doc.setTextColor(150);
+    doc.text('Lavandery — Inova Tecnologia e Serviços e Representação Ltda.', pad, 820);
+    doc.text(new Date().toLocaleDateString('pt-BR'), W-pad, 820, { align: 'right' });
+
+    const buffer = Buffer.from(doc.output('arraybuffer'));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="repasse_${condo?.name?.replace(/[^a-z0-9]/gi,'_')}_${month}.pdf"`);
+    res.send(buffer);
+  } catch (e) {
+    console.error('[monthly-pdf]', e);
+    res.status(500).json({ error: 'pdf_failed', detail: String(e.message||e) });
+  }
 });
 
 // Detalhe de um condo — entradas mensais
