@@ -133,11 +133,32 @@ app.get('/api/condominiums', (_,res) => {
   })));
 });
 
-// Padroniza todos os nomes em MAIÚSCULAS
+// Padroniza todos os nomes em MAIÚSCULAS + limpa prefixos + corrige numerais romanos
 app.post('/api/condominiums/uppercase-all', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
-  const r = db.prepare("UPDATE condominiums SET name = UPPER(name) WHERE name != UPPER(name)").run();
-  res.json({ ok: true, updated: r.changes });
+  const rows = db.prepare('SELECT id, name FROM condominiums').all();
+  const stmt = db.prepare('UPDATE condominiums SET name=? WHERE id=?');
+  let updated = 0;
+  for (const r of rows) {
+    let n = String(r.name || '').trim();
+    // Remove prefixos inúteis
+    n = n.replace(/^contrato[-\s_]+(comodato|gest[ãa]o|servi[çc]o)[-\s_]+/i, '')
+         .replace(/^contrato[-\s_]+/i, '')
+         .replace(/\s*\(\d+\)\s*$/g, '')
+         .replace(/\s*atualizado\s*$/i, '')
+         .replace(/\s*ver\.\s*\d+\s*$/i, '')
+         .replace(/\s*-\s*rev\.[^-]*$/i, '')
+         .replace(/\s+/g, ' ').trim();
+    // UTF-8 safe uppercase
+    let up = n.toLocaleUpperCase('pt-BR');
+    // Corrige numerais romanos comumente bagunçados: "Ii" → "II", "Iii" → "III"
+    up = up.replace(/\bII\b/g, 'II').replace(/\bIII\b/g, 'III')
+           .replace(/\b(\w+)\s+II\s+/gi, (_, w) => `${w.toLocaleUpperCase('pt-BR')} II `)
+           .replace(/\bIi\b/gi, 'II')
+           .replace(/\bIii\b/gi, 'III');
+    if (up !== r.name) { stmt.run(up, r.id); updated++; }
+  }
+  res.json({ ok: true, updated });
 });
 
 // Remove registros que não são condomínios (lixo do Autentique)
