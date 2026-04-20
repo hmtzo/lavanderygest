@@ -13,7 +13,8 @@ import { waStatus, waConnect, waDisconnect, waSendText, waAutoStart } from './wh
 import { gmapsTest, gmapsGeocode, gmapsRoute, s3Test, s3PresignUpload, s3PutObject, asaasTest, asaasCreateCustomer, asaasCreateCharge, asaasListCharges, sentryInit, sentryCapture, sentryTest } from './integrations-services.js';
 import { firebaseTest, firebaseUpload } from './firebase.js';
 import { driveTest, driveUpload } from './gdrive.js';
-import { extractSheetId, listTabs, fetchTabCsv, parseCsv, classifyTab, parseCondoTab, calculateRepasse, validateCalc, detectModel, parseMonthlyReport, calcMonthlyReport } from './repasse.js';
+import { extractSheetId, listTabs, fetchTabCsv, parseCsv, classifyTab, parseCondoTab, calculateRepasse, validateCalc, detectModel, parseMonthlyReport, calcMonthlyReport, detectCondoRates } from './repasse.js';
+import * as XLSX from 'xlsx';
 import { generateDeliveryReceipt, generateSurveyChecklist, generateInstallationReport, generateEquipmentDeliveryTerm } from './pdf-templates.js';
 import { setupAuth, authMiddleware, requireAuth, authRoutes, publicMiddleware, PUBLIC_PATHS } from './auth.js';
 import { fetchCalendars } from './calendar.js';
@@ -150,6 +151,76 @@ app.get('/api/condominiums/:id', (req,res) => {
   c.schedule = db.prepare('SELECT * FROM visits_schedule WHERE condo_id=? ORDER BY date LIMIT 30').all(c.id);
   c.forecast = forecastCondo(c);
   res.json(c);
+});
+
+// Importa planilha mestre (1 aba por condomínio) e configura rate/price/tax de todos
+app.post('/api/condominiums/bulk-configure-from-sheet', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const { url, dry_run } = req.body || {};
+    const sheetId = extractSheetId(url);
+    if (!sheetId) return res.status(400).json({ error: 'invalid_url' });
+    // Baixa workbook inteiro como xlsx
+    const xlsxUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
+    const r = await fetch(xlsxUrl, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0 Lavandery/1.0' } });
+    if (!r.ok) return res.status(400).json({ error: 'sheet_fetch_failed', status: r.status, hint: 'Planilha precisa estar com acesso público (qualquer um com link)' });
+    const arr = new Uint8Array(await r.arrayBuffer());
+    const wb = XLSX.read(arr, { type: 'array', raw: false });
+
+    const condos = db.prepare('SELECT id, name FROM condominiums').all();
+    const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    function matchCondo(tabName) {
+      const t = norm(tabName);
+      if (!t) return null;
+      let best = null, bs = 0;
+      for (const c of condos) {
+        const n = norm(c.name);
+        if (!n) continue;
+        if (t.includes(n) || n.includes(t)) {
+          const s = Math.min(t.length, n.length) / Math.max(t.length, n.length);
+          if (s > bs) { bs = s; best = c; }
+        }
+      }
+      return bs > 0.35 ? best : null;
+    }
+
+    const IGNORE = ['REPASSE TOTAL', 'RESUMO', 'DASHBOARD', 'TEMPLATE', 'MODELO'];
+    const results = [];
+    const upsert = db.prepare('UPDATE condominiums SET cycle_rate=COALESCE(?,cycle_rate), cycle_price=COALESCE(?,cycle_price), tax_rate=COALESCE(?,tax_rate) WHERE id=?');
+
+    for (const tabName of wb.SheetNames) {
+      const clean = tabName.trim();
+      if (IGNORE.some(x => clean.toUpperCase().includes(x))) { results.push({ tab: clean, ok:false, reason:'ignored' }); continue; }
+      const ws = wb.Sheets[tabName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false });
+      const cfg = detectCondoRates(rows);
+      if (!cfg.cycle_rate) { results.push({ tab: clean, ok:false, reason:'no_rate_detected', ...cfg }); continue; }
+      const matched = matchCondo(clean);
+      if (!matched) { results.push({ tab: clean, ok:false, reason:'no_condo_match', ...cfg }); continue; }
+      if (!dry_run) upsert.run(cfg.cycle_rate, cfg.cycle_price, cfg.tax_rate, matched.id);
+      results.push({ tab: clean, ok:true, condo_id: matched.id, condo_name: matched.name, cycle_rate: cfg.cycle_rate, cycle_price: cfg.cycle_price, tax_rate: cfg.tax_rate, rate_mixed: cfg.rate_mixed });
+    }
+
+    const okCount = results.filter(r => r.ok).length;
+    res.json({ ok:true, tabs: wb.SheetNames.length, configured: okCount, dry_run: !!dry_run, results });
+  } catch (e) {
+    console.error('[bulk-configure-from-sheet]', e);
+    res.status(500).json({ error: 'configure_failed', detail: String(e.message||e) });
+  }
+});
+
+// Aplica tarifas padrão a todos os condomínios (ou apenas aos sem config)
+app.post('/api/condominiums/bulk-rates', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { cycle_price, cycle_rate, tax_rate, overwrite } = req.body || {};
+  const sets = [], args = [];
+  if (cycle_price != null) { sets.push('cycle_price=?'); args.push(parseFloat(cycle_price)||null); }
+  if (cycle_rate != null) { sets.push('cycle_rate=?'); args.push(parseFloat(cycle_rate)||null); }
+  if (tax_rate != null) { sets.push('tax_rate=?'); args.push(parseFloat(tax_rate)||null); }
+  if (!sets.length) return res.json({ ok:true, updated:0 });
+  const whereClause = overwrite ? '' : ' WHERE cycle_rate IS NULL';
+  const r = db.prepare(`UPDATE condominiums SET ${sets.join(',')}${whereClause}`).run(...args);
+  res.json({ ok:true, updated: r.changes });
 });
 
 app.patch('/api/condominiums/:id', (req,res) => {

@@ -462,10 +462,21 @@
   <!-- CONFIGURAÇÃO POR CONDOMÍNIO -->
   <section class="card-new" style="margin-bottom:16px">
     <div class="card-header">
-      <div><div class="card-title">⚙️ Configurar valores por condomínio</div><div class="subtle" style="font-size:12px;margin-top:2px"><b>Preço máquina</b>: quanto o usuário paga por ciclo. <b>Repasse/ciclo</b>: quanto o condomínio recebe por ciclo (antes do imposto). <b>Imposto</b>: % aplicado sobre o repasse.</div></div>
-      <input id="rpCondoSearch" class="input" placeholder="🔎 Buscar condomínio..." style="width:280px;height:36px"/>
+      <div><div class="card-title">⚙️ Configurar valores por condomínio</div><div class="subtle" style="font-size:12px;margin-top:2px"><b>Preço máquina</b>: quanto o usuário paga. <b>Repasse/ciclo</b>: quanto o condomínio recebe. <b>Imposto</b>: % sobre o repasse.</div></div>
+      <input id="rpCondoSearch" class="input" placeholder="🔎 Buscar condomínio..." style="width:240px;height:36px"/>
     </div>
-    <div id="rpCondoRates" style="max-height:420px;overflow-y:auto;margin-top:10px"></div>
+    <!-- Import da planilha mestre -->
+    <div style="background:rgba(123,95,199,.06);border:1px dashed rgba(123,95,199,.3);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:600;color:var(--ink-800);margin-bottom:6px">📥 Importar tarifas de planilha Google Sheets</div>
+      <div style="font-size:11px;color:var(--ink-600);margin-bottom:8px">Cole o link da sua planilha com 1 aba por condomínio — o sistema lê cada aba, extrai REEMBOLSO POR CICLO, ICMS e Preço máquina, e configura tudo automaticamente.</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="rpMasterUrl" class="input" placeholder="https://docs.google.com/spreadsheets/d/..." style="flex:1;height:36px;font-size:12px"/>
+        <button id="rpMasterPreview" class="btn-new ghost sm" style="height:36px">👁 Prévia</button>
+        <button id="rpMasterImport" class="btn-new brand sm" style="height:36px;white-space:nowrap">⚙️ Importar todos</button>
+      </div>
+      <div id="rpMasterResult" style="margin-top:8px;font-size:12px"></div>
+    </div>
+    <div id="rpCondoRates" style="max-height:420px;overflow-y:auto"></div>
   </section>
 
   <!-- ENTRADA MENSAL: tabela com todos condos, digita ciclos, calcula na hora -->
@@ -2115,6 +2126,41 @@ function renderCondoRates(filter='') {
   });
 }
 document.querySelector('#rpCondoSearch')?.addEventListener('input', e => renderCondoRates(e.target.value));
+
+// Importar tarifas da planilha mestre
+async function rpMasterCall(dry) {
+  const url = document.querySelector('#rpMasterUrl').value.trim();
+  if (!url) { Toast.warning('Cole o link da planilha'); return null; }
+  const r = await fetch('/api/condominiums/bulk-configure-from-sheet', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ url, dry_run: dry })
+  });
+  return { ok: r.ok, data: await r.json() };
+}
+function rpMasterRender(d) {
+  const money = n => 'R$ ' + (n||0).toFixed(2);
+  const host = document.querySelector('#rpMasterResult');
+  const ok = d.results.filter(x => x.ok);
+  const fail = d.results.filter(x => !x.ok);
+  host.innerHTML = `
+    <div style="padding:10px;background:#fff;border-radius:8px;border:1px solid var(--ink-200)">
+      <div style="margin-bottom:8px"><b>${d.configured} configurados</b> / ${d.tabs} abas${d.dry_run?' (prévia — nada salvo)':' ✓ salvos'}</div>
+      <div style="max-height:240px;overflow-y:auto;font-size:11px">
+        ${ok.map(x => `<div style="padding:4px 0;border-bottom:1px dashed var(--ink-100)">✓ <b>${esc(x.tab)}</b> → ${esc(x.condo_name)} · rep ${money(x.cycle_rate)}${x.rate_mixed?' (misto)':''} · máq ${x.cycle_price?money(x.cycle_price):'—'} · imp ${x.tax_rate||'—'}%</div>`).join('')}
+        ${fail.map(x => `<div style="padding:4px 0;color:#b42020">✗ <b>${esc(x.tab)}</b>: ${x.reason}</div>`).join('')}
+      </div>
+    </div>`;
+}
+document.querySelector('#rpMasterPreview')?.addEventListener('click', async () => {
+  const btn = event.currentTarget; const orig = btn.textContent; btn.textContent='Lendo...'; btn.disabled=true;
+  try { const r = await rpMasterCall(true); if (!r?.ok) throw new Error(r?.data?.detail||r?.data?.error||'erro'); rpMasterRender(r.data); Toast.success(`${r.data.configured} condomínios prontos`); } catch(e){ Toast.error('Erro: '+e.message); }
+  btn.textContent=orig; btn.disabled=false;
+});
+document.querySelector('#rpMasterImport')?.addEventListener('click', async () => {
+  const btn = event.currentTarget; const orig = btn.textContent; btn.textContent='Importando...'; btn.disabled=true;
+  try { const r = await rpMasterCall(false); if (!r?.ok) throw new Error(r?.data?.detail||r?.data?.error||'erro'); rpMasterRender(r.data); Toast.success(`${r.data.configured} condomínios configurados`); await loadCondoRates(); renderMonthTable(); } catch(e){ Toast.error('Erro: '+e.message); }
+  btn.textContent=orig; btn.disabled=false;
+});
 
 const _origLoadRpsSummary = typeof loadRpsSummary === 'function' ? loadRpsSummary : null;
 async function loadRepasseSummary() {

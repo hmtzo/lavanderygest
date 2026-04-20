@@ -202,6 +202,69 @@ export function parseMonthlyReport(rows) {
   };
 }
 
+// Detecta configuração (rate, price, tax) de uma aba no modelo Lavandery
+export function detectCondoRates(rows) {
+  const result = { cycle_rate: null, cycle_price: null, tax_rate: null };
+  const parseBR = s => { if (s==null||s==='') return null; const str=String(s).replace(/R\$\s*/g,'').replace(/,/g,'').replace(/\s/g,''); const n=parseFloat(str); return isNaN(n)?null:n; };
+  let washesCount = 0, dryesCount = 0, washValue = 0, dryValue = 0;
+
+  for (const r of rows) {
+    const cells = r.map(x => String(x||'').trim());
+    const line = cells.join('|').toLowerCase();
+
+    // REEMBOLSO POR CICLO
+    if (/reembolso.*ciclo/i.test(line) && !result.cycle_rate) {
+      for (const c of cells) { const n = parseBR(c); if (n != null && n > 0.5 && n < 50) { result.cycle_rate = n; break; } }
+    }
+    // Imposto %
+    if (/icms|imposto/i.test(line) && !result.tax_rate) {
+      for (const c of cells) { if (/%/.test(c)) { const n = parseBR(c.replace('%','')); if (n != null && n > 5 && n < 60) { result.tax_rate = n; break; } } }
+    }
+    // Total lavagens/secagens
+    if (/total.*ciclos.*lavage/i.test(line)) {
+      const nums = cells.map(parseBR).filter(n => n != null);
+      if (nums.length >= 2) { washesCount = nums[0] || 0; washValue = nums[1] || 0; }
+    }
+    if (/total.*ciclos.*secage/i.test(line)) {
+      const nums = cells.map(parseBR).filter(n => n != null);
+      if (nums.length >= 2) { dryesCount = nums[0] || 0; dryValue = nums[1] || 0; }
+    }
+  }
+
+  // Preço/ciclo calculado: (washValue + dryValue) / (washes + dries)
+  const totalCycles = washesCount + dryesCount;
+  if (totalCycles > 0) {
+    const totalValue = washValue + dryValue;
+    if (totalValue > 0) result.cycle_price = totalValue / totalCycles;
+  }
+
+  // Formato complexo (Vibra): REPASSE X,YY em cada linha → pega a média
+  if (!result.cycle_rate) {
+    const repasses = [];
+    for (const r of rows) {
+      for (const c of r) {
+        const m = String(c||'').match(/REPASSE\s*([\d,]+)/i);
+        if (m) { const n = parseFloat(m[1].replace(',','.')); if (n > 0) repasses.push(n); }
+      }
+    }
+    if (repasses.length) {
+      // Usa mediana pra robustez
+      repasses.sort((a,b) => a-b);
+      result.cycle_rate = repasses[Math.floor(repasses.length/2)];
+      result.rate_mixed = true;
+    }
+  }
+
+  // Nome condo do título
+  for (const r of rows.slice(0,3)) {
+    const t = r.map(x=>String(x||'')).join(' ');
+    const m = t.match(/Relat[óo]rio\s*[–-]\s*[^–-]+[–-]\s*(.+)/i);
+    if (m) { result.condo_name = m[1].trim(); break; }
+  }
+
+  return result;
+}
+
 // Calcula valores financeiros de um relatório mensal
 export function calcMonthlyReport(parsed) {
   const rate = parsed.reimbursePerCycle || 2.50;
