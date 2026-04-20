@@ -161,6 +161,101 @@ app.post('/api/condominiums/uppercase-all', (req, res) => {
   res.json({ ok: true, updated });
 });
 
+// Importa dados de implantação (banco/obra/vendedor) e match fuzzy por nome
+app.post('/api/condominiums/bulk-import-implanted', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { rows, auto_create } = req.body || {};
+  if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'no_rows' });
+
+  const condos = db.prepare('SELECT id, name FROM condominiums').all();
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  function matchCondo(name) {
+    const q = norm(name); if (!q) return null;
+    let best = null, bs = 0;
+    for (const c of condos) {
+      const n = norm(c.name); if (!n) continue;
+      if (q.includes(n) || n.includes(q)) {
+        const s = Math.min(q.length, n.length) / Math.max(q.length, n.length);
+        if (s > bs) { bs = s; best = c; }
+      }
+    }
+    return bs > 0.35 ? best : null;
+  }
+
+  // Normaliza data: aceita MM/DD/YY ou DD/MM/YYYY ou "ASSINADO" → deixa como string
+  function normDate(s) {
+    if (!s) return null;
+    const str = String(s).trim();
+    if (!str || str === '—' || str === '-') return null;
+    // Datas formato MM/DD/YY
+    const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (m) {
+      // Excel geralmente exporta MM/DD/YY
+      const [_, a, b, y] = m;
+      const year = y.length === 2 ? ('20' + y) : y;
+      // Heurística: se primeiro > 12, provavelmente DD/MM; senão MM/DD
+      const month = parseInt(a) > 12 ? b.padStart(2,'0') : a.padStart(2,'0');
+      const day = parseInt(a) > 12 ? a.padStart(2,'0') : b.padStart(2,'0');
+      return `${year}-${month}-${day}`;
+    }
+    // Strings como "ASSINADO", "EM ANDAMENTO", "PARADA" ficam como estão
+    return str;
+  }
+  function cleanBank(s) {
+    if (!s) return null;
+    const str = String(s).trim();
+    if (!str || /n[ãa]o\s+(encontrado|cadastrado)/i.test(str) || str === '—' || str === '-') return null;
+    return str;
+  }
+
+  const insertCondo = db.prepare(`INSERT INTO condominiums (id, name, is_contract, bank_name, bank_agency, bank_account, contract_sign_date, implantation_date, installation_owner, seller_name) VALUES (?,?,1,?,?,?,?,?,?,?)`);
+  const updateCondo = db.prepare(`UPDATE condominiums SET
+    bank_name = COALESCE(?, bank_name),
+    bank_agency = COALESCE(?, bank_agency),
+    bank_account = COALESCE(?, bank_account),
+    contract_sign_date = COALESCE(?, contract_sign_date),
+    implantation_date = COALESCE(?, implantation_date),
+    installation_owner = COALESCE(?, installation_owner),
+    seller_name = COALESCE(?, seller_name)
+    WHERE id = ?`);
+
+  const results = [];
+  for (const row of rows) {
+    const name = row.condominio || row.condo || row.nome;
+    if (!name) { results.push({ name:'(vazio)', ok:false, reason:'no_name' }); continue; }
+    const data = {
+      bank_name: cleanBank(row.banco),
+      bank_agency: cleanBank(row.agencia || row['agência']),
+      bank_account: cleanBank(row.conta),
+      contract_sign_date: normDate(row['data de assinatura'] || row.data_assinatura),
+      implantation_date: normDate(row['data de implantação'] || row.data_implantacao),
+      installation_owner: row.obra ? String(row.obra).toUpperCase().trim() : null,
+      seller_name: row.vendedor ? String(row.vendedor).toUpperCase().trim() : null,
+    };
+    const matched = matchCondo(name);
+    if (matched) {
+      updateCondo.run(data.bank_name, data.bank_agency, data.bank_account, data.contract_sign_date, data.implantation_date, data.installation_owner, data.seller_name, matched.id);
+      results.push({ name, ok:true, matched: matched.name, action: 'updated' });
+    } else if (auto_create) {
+      const id = 'c_impl_' + norm(name).slice(0,20);
+      try {
+        insertCondo.run(id, name.toUpperCase().trim(), data.bank_name, data.bank_agency, data.bank_account, data.contract_sign_date, data.implantation_date, data.installation_owner, data.seller_name);
+        condos.push({ id, name });
+        results.push({ name, ok:true, action: 'created', id });
+      } catch (e) {
+        results.push({ name, ok:false, reason: 'insert_failed', error: String(e.message||e) });
+      }
+    } else {
+      results.push({ name, ok:false, reason: 'no_match' });
+    }
+  }
+  const ok = results.filter(r => r.ok).length;
+  const fail = results.filter(r => !r.ok).length;
+  const created = results.filter(r => r.action==='created').length;
+  const updated = results.filter(r => r.action==='updated').length;
+  res.json({ ok:true, total: rows.length, processed: ok, failed: fail, updated, created, results });
+});
+
 // Remove registros que não são condomínios (lixo do Autentique)
 app.post('/api/condominiums/cleanup-non-condos', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
@@ -217,7 +312,9 @@ app.patch('/api/condominiums/:id', (req,res) => {
     'maintenance_interval_months','maintenance_label','cycles_per_week',
     'soap_ml_per_cycle','softener_ml_per_cycle','gallon_ml',
     'soap_gallons_on_site','softener_gallons_on_site','contact_email',
-    'cycle_rate','cycle_price','tax_rate'];
+    'cycle_rate','cycle_price','tax_rate',
+    'bank_name','bank_agency','bank_account','contract_sign_date',
+    'implantation_date','installation_owner','seller_name'];
   const sets = [], args = [];
   fields.forEach(f => { if (b[f] !== undefined) { sets.push(`${f}=?`); args.push(b[f]); } });
   if (!sets.length) return res.json({ ok:true, changed:0 });
@@ -1318,6 +1415,14 @@ try { db.exec(`ALTER TABLE condominiums ADD COLUMN slug TEXT`); } catch(e){}
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN cycle_rate REAL`); } catch(e){}  // R$ repasse / ciclo
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN cycle_price REAL`); } catch(e){} // R$ cobrado do usuário / ciclo
 try { db.exec(`ALTER TABLE condominiums ADD COLUMN tax_rate REAL`); } catch(e){}
+// Dados comerciais/bancários da implantação
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN bank_name TEXT`); } catch(e){}
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN bank_agency TEXT`); } catch(e){}
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN bank_account TEXT`); } catch(e){}
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN contract_sign_date TEXT`); } catch(e){}
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN implantation_date TEXT`); } catch(e){}
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN installation_owner TEXT`); } catch(e){} // LAVANDERY | CONDOMINIO
+try { db.exec(`ALTER TABLE condominiums ADD COLUMN seller_name TEXT`); } catch(e){}
 
 function makeSlug(s) {
   return (s||'').toString()

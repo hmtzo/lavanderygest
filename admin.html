@@ -287,6 +287,8 @@
       <input id="condoSearch" class="input" placeholder="Buscar..." style="max-width:280px"/>
       <button id="upperCondosBtn" class="btn-new ghost sm" title="Padronizar todos em MAIÚSCULAS">🔠 UPPERCASE</button>
       <button id="cleanupCondosBtn" class="btn-new ghost sm" title="Remove registros que não são condomínios">🧹 Limpar não-condos</button>
+      <button id="importImplantedBtn" class="btn-new ghost sm" title="Importar dados bancários + vendedores (XLS/CSV)">📊 Importar implantados</button>
+      <input type="file" id="implantedFile" accept=".csv,.xlsx,.xls" style="display:none"/>
       <button id="newCondoBtn" class="btn btn-primary" style="width:auto;padding:0 20px">+ Novo</button>
     </div>
   </div>
@@ -2270,6 +2272,18 @@ function renderCpOverview() {
           <div class="info-row"><span class="k">Contrato Autentique</span><span class="v">${c.autentique_doc_id ? '<a href="https://painel.autentique.com.br/documentos/'+c.autentique_doc_id+'" target="_blank" style="color:var(--brand-700)">abrir ↗</a>' : '—'}</span></div>
         </div>
       </div>
+      <div class="card-new" style="margin-top:14px">
+        <div class="card-header"><div class="card-title">💼 Comercial & Bancário</div></div>
+        <div style="padding:14px">
+          <div class="info-row"><span class="k">Vendedor</span><span class="v">${esc(c.seller_name||'—')}</span></div>
+          <div class="info-row"><span class="k">Obra</span><span class="v">${esc(c.installation_owner||'—')}</span></div>
+          <div class="info-row"><span class="k">Assinatura contrato</span><span class="v">${c.contract_sign_date?_cpDate(new Date(c.contract_sign_date).getTime()):'—'}</span></div>
+          <div class="info-row"><span class="k">Implantação</span><span class="v">${c.implantation_date ? (/^\d{4}-\d{2}-\d{2}$/.test(c.implantation_date) ? _cpDate(new Date(c.implantation_date).getTime()) : esc(c.implantation_date)) : '—'}</span></div>
+          <div class="info-row"><span class="k">Banco</span><span class="v">${esc(c.bank_name||'—')}</span></div>
+          <div class="info-row"><span class="k">Agência</span><span class="v">${esc(c.bank_agency||'—')}</span></div>
+          <div class="info-row"><span class="k">Conta</span><span class="v">${esc(c.bank_account||'—')}</span></div>
+        </div>
+      </div>
       <div class="card-new">
         <div class="card-header"><div class="card-title">Localização</div></div>
         <div id="cpMiniMap" style="height:320px;border-radius:10px;overflow:hidden"></div>
@@ -3000,6 +3014,29 @@ document.querySelector('#upperCondosBtn')?.addEventListener('click', async () =>
   const d = await r.json();
   if (r.ok) { Toast.success(`${d.updated} nomes padronizados`); loadCondos(); }
   else Toast.error('Erro');
+});
+
+// Importar dados de implantação (banco, vendedor, datas) via XLS/CSV
+document.querySelector('#importImplantedBtn')?.addEventListener('click', () => document.querySelector('#implantedFile').click());
+document.querySelector('#implantedFile')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0]; if (!file) return;
+  Toast.message({ body: `Lendo ${file.name}...` });
+  try {
+    if (!window.XLSX) await new Promise((res, rej) => { const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:'array', raw:false });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false }).map(o => { const n={}; for(const k of Object.keys(o)) n[k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_')] = o[k]; return n; });
+    if (!rows.length) { Toast.warning('Arquivo vazio'); return; }
+    const autoCreate = confirm(`${rows.length} registros lidos. Criar condomínios novos pra nomes que não baterem com os existentes?`);
+    const r = await fetch('/api/condominiums/bulk-import-implanted', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rows, auto_create: autoCreate }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail||d.error);
+    Toast.success(`${d.updated} atualizados · ${d.created} criados · ${d.failed} falhas (${d.total} total)`);
+    console.log('Import results:', d.results);
+    loadCondos();
+  } catch (e) { Toast.error('Erro: ' + e.message); }
+  e.target.value = '';
 });
 
 // Limpar não-condomínios
