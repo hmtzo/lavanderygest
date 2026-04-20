@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Financeiro · Lavandery</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+<style>
+  body { font-family: 'Inter', sans-serif; background: #F4F0FA; color: #1F1A33; }
+  h1, h2, h3 { font-family: 'Manrope', sans-serif; letter-spacing: -0.02em; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  .brand-grad { background: linear-gradient(135deg, #533C9D 0%, #7D5FC7 100%); }
+  .brand-grad-text { background: linear-gradient(135deg, #2E2165, #7B5FC7); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sidebar-link { @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-purple-50 hover:text-purple-700 transition cursor-pointer; }
+  .sidebar-link.active { background: linear-gradient(135deg, rgba(123,95,199,.18), rgba(125,95,199,.08)); color: #533C9D; font-weight: 600; }
+  .card { background: rgba(255,255,255,.88); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.9); border-radius: 18px; box-shadow: 0 4px 16px -4px rgba(83,60,157,.08); }
+  .kpi { padding: 22px; }
+  .kpi-label { font-size: 12px; font-weight: 600; color: #6B6881; text-transform: uppercase; letter-spacing: 0.06em; }
+  .kpi-value { font-family: 'Manrope'; font-size: 30px; font-weight: 800; margin-top: 8px; letter-spacing: -0.03em; }
+  .kpi-hint { font-size: 12px; color: #8B85A1; margin-top: 4px; }
+  .tab-btn { padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 500; color: #6B6881; cursor: pointer; border: none; background: transparent; transition: all .2s; }
+  .tab-btn.active { background: white; color: #1F1A33; box-shadow: 0 2px 6px rgba(0,0,0,.06); font-weight: 600; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="flex min-h-screen">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white/70 backdrop-blur border-r border-white/80 p-5 flex flex-col sticky top-0 h-screen">
+    <div class="flex items-center gap-2 mb-6">
+      <img src="/logo.svg" alt="Lavandery" class="h-8"/>
+      <span class="font-bold text-sm" style="font-family:'Manrope'">Financeiro</span>
+    </div>
+    <nav class="space-y-1 flex-1">
+      <a class="sidebar-link active" data-view="dashboard"><span class="material-symbols-outlined">dashboard</span>Dashboard</a>
+      <a class="sidebar-link" data-view="import"><span class="material-symbols-outlined">upload_file</span>Importação</a>
+      <a class="sidebar-link" data-view="condos"><span class="material-symbols-outlined">apartment</span>Condomínios</a>
+      <a class="sidebar-link" data-view="repasses"><span class="material-symbols-outlined">payments</span>Repasses</a>
+    </nav>
+    <div class="mt-auto border-t border-gray-100 pt-4">
+      <a href="/admin.html" class="sidebar-link" style="background:transparent"><span class="material-symbols-outlined">arrow_back</span>Voltar ao admin</a>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="flex-1 p-8 max-w-7xl mx-auto w-full">
+
+    <!-- DASHBOARD -->
+    <section id="view-dashboard">
+      <div class="flex justify-between items-start mb-6">
+        <div>
+          <h1 class="text-3xl font-bold brand-grad-text">Dashboard Financeiro</h1>
+          <p class="text-sm text-gray-500 mt-1">Visão consolidada de receitas, repasses e margem de todas as lavanderias.</p>
+        </div>
+        <div class="flex gap-2 items-center">
+          <select id="dashYear" class="rounded-xl border-gray-200 text-sm"></select>
+          <button id="dashPdf" class="brand-grad text-white px-4 py-2 rounded-full text-sm font-semibold">📄 Exportar PDF</button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="card kpi"><div class="kpi-label">Receita total</div><div class="kpi-value" id="kReceita">R$ —</div><div class="kpi-hint" id="kReceitaHint">—</div></div>
+        <div class="card kpi"><div class="kpi-label">Repasse pago</div><div class="kpi-value" style="color:#533C9D" id="kRepasse">R$ —</div><div class="kpi-hint" id="kRepasseHint">—</div></div>
+        <div class="card kpi"><div class="kpi-label">Líquido Lavandery</div><div class="kpi-value" style="color:#10b981" id="kLav">R$ —</div><div class="kpi-hint" id="kLavHint">—</div></div>
+        <div class="card kpi"><div class="kpi-label">Ciclos totais</div><div class="kpi-value" id="kCiclos">—</div><div class="kpi-hint" id="kCiclosHint">—</div></div>
+      </div>
+
+      <!-- Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5 lg:col-span-2"><h3 class="font-semibold text-sm mb-3">Evolução mensal</h3><div style="height:260px"><canvas id="chTrend"></canvas></div></div>
+        <div class="card p-5"><h3 class="font-semibold text-sm mb-3">Divisão</h3><div style="height:260px"><canvas id="chDonut"></canvas></div></div>
+      </div>
+
+      <!-- Top performers -->
+      <div class="card p-5">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-semibold text-sm">Top 10 condomínios por receita</h3>
+          <span class="text-xs text-gray-400" id="topPeriod">—</span>
+        </div>
+        <div id="topTable"></div>
+      </div>
+    </section>
+
+    <!-- IMPORT -->
+    <section id="view-import" style="display:none">
+      <h1 class="text-3xl font-bold brand-grad-text">Importação de Dados</h1>
+      <p class="text-sm text-gray-500 mt-1 mb-6">Suba o extrato de uso de máquinas (HTML/XLS do Cartão Clientes) ou CSV com totais por condomínio.</p>
+
+      <div class="card p-8">
+        <div id="dropzone" class="border-2 border-dashed border-purple-300 rounded-2xl p-12 text-center cursor-pointer hover:border-purple-500 hover:bg-purple-50/50 transition">
+          <span class="material-symbols-outlined text-5xl text-purple-500">cloud_upload</span>
+          <h3 class="text-lg font-semibold mt-3">Arraste o arquivo aqui</h3>
+          <p class="text-sm text-gray-500 mt-1">ou <span class="text-purple-600 underline">clique pra selecionar</span></p>
+          <p class="text-xs text-gray-400 mt-3">Aceita CSV, XLS, XLSX · Sistema detecta formato automaticamente</p>
+          <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.html" class="hidden"/>
+        </div>
+        <div id="importResult" class="mt-4"></div>
+      </div>
+
+      <div class="card p-5 mt-6">
+        <h3 class="font-semibold text-sm mb-3">📋 Modelo CSV</h3>
+        <p class="text-xs text-gray-500 mb-2">Colunas aceitas: <code>condominio, mes, lavagens, secagens</code> + opcionais <code>valor_ciclo, imposto</code></p>
+        <button id="downloadSample" class="text-sm text-purple-600 font-semibold">Baixar modelo</button>
+      </div>
+    </section>
+
+    <!-- CONDOS -->
+    <section id="view-condos" style="display:none">
+      <div class="flex justify-between items-start mb-6">
+        <div>
+          <h1 class="text-3xl font-bold brand-grad-text">Gestão de Condomínios</h1>
+          <p class="text-sm text-gray-500 mt-1">Portfolio completo com métricas financeiras individuais.</p>
+        </div>
+        <input id="condoSearch" placeholder="🔎 Buscar..." class="rounded-full border-gray-200 text-sm px-4" style="height:40px;width:260px"/>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="card kpi"><div class="kpi-label">Total condomínios</div><div class="kpi-value" id="cTotal">—</div></div>
+        <div class="card kpi"><div class="kpi-label">Com repasse configurado</div><div class="kpi-value" style="color:#533C9D" id="cConfig">—</div></div>
+        <div class="card kpi"><div class="kpi-label">Total máquinas</div><div class="kpi-value" id="cMachines">—</div></div>
+      </div>
+
+      <div class="card p-0 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+              <tr>
+                <th class="text-left py-3 px-4">Condomínio</th>
+                <th class="text-center py-3 px-4">Lav</th>
+                <th class="text-center py-3 px-4">Sec</th>
+                <th class="text-right py-3 px-4">R$/ciclo máq</th>
+                <th class="text-right py-3 px-4">Repasse/ciclo</th>
+                <th class="text-right py-3 px-4">Imposto</th>
+                <th class="text-right py-3 px-4">Rep. YTD</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="condoRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- REPASSES (atalho) -->
+    <section id="view-repasses" style="display:none">
+      <h1 class="text-3xl font-bold brand-grad-text">Repasses Mensais</h1>
+      <p class="text-sm text-gray-500 mt-1 mb-6">Para lançamento mensal use o painel completo.</p>
+      <div class="card p-6">
+        <a href="/admin.html#repasses" class="brand-grad text-white px-6 py-3 rounded-full text-sm font-semibold inline-flex items-center gap-2">
+          <span class="material-symbols-outlined">open_in_new</span>Abrir painel de repasses
+        </a>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="/bubbles.js" defer></script>
+<script>
+const _money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const _int = n => (+n||0).toLocaleString('pt-BR');
+const esc = s => String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Navegação sidebar
+document.querySelectorAll('.sidebar-link[data-view]').forEach(a => {
+  a.addEventListener('click', () => {
+    document.querySelectorAll('.sidebar-link').forEach(x => x.classList.remove('active'));
+    a.classList.add('active');
+    const v = a.dataset.view;
+    document.querySelectorAll('section[id^="view-"]').forEach(s => s.style.display = 'none');
+    document.querySelector('#view-'+v).style.display = 'block';
+    if (v === 'dashboard') loadDashboard();
+    if (v === 'condos') loadCondosView();
+  });
+});
+
+// Guard
+(async () => {
+  try { const r = await fetch('/api/auth/me'); if (!r.ok) location.href = '/login.html'; } catch { location.href = '/login.html'; }
+})();
+
+// ---------- DASHBOARD ----------
+let _dashData = null;
+async function loadDashboard() {
+  const [condos] = await Promise.all([fetch('/api/condominiums').then(r=>r.ok?r.json():[])]);
+  // Fetch repasses de cada condo
+  const allRepasses = await Promise.all(condos.map(c => fetch('/api/condominiums/'+c.id+'/repasse').then(r=>r.ok?r.json():[]).catch(()=>[])));
+  _dashData = { condos, flat: allRepasses.flat() };
+  // Anos disponíveis
+  const years = [...new Set(_dashData.flat.map(r => (r.month||'').slice(0,4)))].filter(Boolean).sort().reverse();
+  const cur = String(new Date().getFullYear());
+  if (!years.includes(cur)) years.unshift(cur);
+  const ySel = document.querySelector('#dashYear');
+  ySel.innerHTML = years.map(y => `<option>${y}</option>`).join('');
+  ySel.value = years[0];
+  renderDashboard();
+}
+function renderDashboard() {
+  if (!_dashData) return;
+  const year = document.querySelector('#dashYear').value;
+  const rows = _dashData.flat.filter(r => (r.month||'').startsWith(year));
+  const totRec = rows.reduce((s,r)=>s+(r.receita_maquina||0),0);
+  const totRep = rows.reduce((s,r)=>s+(r.repasse_liquido||0),0);
+  const totLav = rows.reduce((s,r)=>s+(r.liquido_lavandery||0),0);
+  const totCy = rows.reduce((s,r)=>s+(r.cycles||0),0);
+  const margem = totRec>0 ? (totLav/totRec*100) : 0;
+  document.querySelector('#kReceita').textContent = _money(totRec);
+  document.querySelector('#kReceitaHint').textContent = `${rows.length} lançamentos · ${_int(_dashData.condos.length)} condos`;
+  document.querySelector('#kRepasse').textContent = _money(totRep);
+  document.querySelector('#kRepasseHint').textContent = `Média ${_money(rows.length?totRep/rows.length:0)} por lançamento`;
+  document.querySelector('#kLav').textContent = _money(totLav);
+  document.querySelector('#kLavHint').textContent = `Margem ${margem.toFixed(1)}%`;
+  document.querySelector('#kCiclos').textContent = _int(totCy);
+  document.querySelector('#kCiclosHint').textContent = `${_int(rows.reduce((s,r)=>s+(r.washes||0),0))} lav · ${_int(rows.reduce((s,r)=>s+(r.dries||0),0))} sec`;
+
+  // Agrupa por mês
+  const byMonth = {};
+  for (const r of rows) {
+    const m = r.month || '—';
+    if (!byMonth[m]) byMonth[m] = { receita:0, repasse:0, lavandery:0, cy:0 };
+    byMonth[m].receita += r.receita_maquina||0;
+    byMonth[m].repasse += r.repasse_liquido||0;
+    byMonth[m].lavandery += r.liquido_lavandery||0;
+    byMonth[m].cy += r.cycles||0;
+  }
+  const months = Object.keys(byMonth).sort();
+  const trendEl = document.querySelector('#chTrend');
+  if (window._chTrend) window._chTrend.destroy();
+  window._chTrend = new Chart(trendEl, {
+    type:'line', data:{ labels: months, datasets:[
+      { label:'Receita', data: months.map(m=>byMonth[m].receita), borderColor:'#6B7280', borderDash:[4,4], tension:.3 },
+      { label:'Repasse', data: months.map(m=>byMonth[m].repasse), borderColor:'#7B5FC7', backgroundColor:'rgba(123,95,199,.14)', fill:true, tension:.35 },
+      { label:'Lavandery', data: months.map(m=>byMonth[m].lavandery), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.35 },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom',labels:{boxWidth:10,font:{size:11}} } }, scales:{ y:{ ticks:{ callback: v => 'R$ '+(v/1000)+'k' } } } }
+  });
+  if (window._chDonut) window._chDonut.destroy();
+  window._chDonut = new Chart(document.querySelector('#chDonut'), {
+    type:'doughnut', data:{ labels:['Condomínios','Imposto','Lavandery'], datasets:[{ data:[totRep, rows.reduce((s,r)=>s+(r.imposto||0),0), totLav], backgroundColor:['#7B5FC7','#ef4444','#10b981'], borderWidth:0 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom',labels:{boxWidth:10,font:{size:11}} } } }
+  });
+  document.querySelector('#topPeriod').textContent = `${months[0]||''} — ${months[months.length-1]||''}`;
+
+  // Top 10 por receita
+  const byCondo = {};
+  for (const r of rows) {
+    if (!byCondo[r.condo_id]) byCondo[r.condo_id] = { receita:0, repasse:0, lavandery:0, cy:0, id:r.condo_id };
+    byCondo[r.condo_id].receita += r.receita_maquina||0;
+    byCondo[r.condo_id].repasse += r.repasse_liquido||0;
+    byCondo[r.condo_id].lavandery += r.liquido_lavandery||0;
+    byCondo[r.condo_id].cy += r.cycles||0;
+  }
+  const top = Object.values(byCondo).sort((a,b) => b.receita - a.receita).slice(0, 10);
+  const cmap = Object.fromEntries(_dashData.condos.map(c => [c.id, c.contract_name || c.name]));
+  document.querySelector('#topTable').innerHTML = top.length ? `
+    <table class="w-full text-sm">
+      <thead class="text-xs uppercase tracking-wider text-gray-500 border-b"><tr>
+        <th class="text-left py-2">#</th><th class="text-left py-2">Condomínio</th>
+        <th class="text-right py-2">Ciclos</th><th class="text-right py-2">Receita</th>
+        <th class="text-right py-2">Repasse</th><th class="text-right py-2">Lavandery</th>
+      </tr></thead>
+      <tbody>${top.map((r,i)=>`<tr class="border-b border-gray-50">
+        <td class="py-2.5 text-gray-400">${i+1}</td>
+        <td class="py-2.5 font-medium truncate max-w-xs">${esc(cmap[r.id]||'—')}</td>
+        <td class="py-2.5 text-right">${_int(r.cy)}</td>
+        <td class="py-2.5 text-right">${_money(r.receita)}</td>
+        <td class="py-2.5 text-right text-purple-600 font-semibold">${_money(r.repasse)}</td>
+        <td class="py-2.5 text-right text-green-600">${_money(r.lavandery)}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : '<div class="text-gray-400 text-center py-8">Sem lançamentos em '+year+'</div>';
+}
+document.querySelector('#dashYear')?.addEventListener('change', renderDashboard);
+
+// ---------- IMPORT ----------
+const dz = document.querySelector('#dropzone');
+const fi = document.querySelector('#fileInput');
+dz?.addEventListener('click', () => fi.click());
+['dragover','dragenter'].forEach(e => dz?.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('bg-purple-100'); }));
+['dragleave','drop'].forEach(e => dz?.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('bg-purple-100'); }));
+dz?.addEventListener('drop', ev => { ev.preventDefault(); if (ev.dataTransfer.files[0]) handleFile(ev.dataTransfer.files[0]); });
+fi?.addEventListener('change', ev => ev.target.files[0] && handleFile(ev.target.files[0]));
+
+async function handleFile(file) {
+  const result = document.querySelector('#importResult');
+  result.innerHTML = `<div class="p-4 bg-purple-50 rounded-xl text-sm">⏳ Lendo ${esc(file.name)} (${(file.size/1024).toFixed(1)}KB)...</div>`;
+  try {
+    // Detecta se é HTML do cartão (UsoCartaoClientes)
+    const sniff = await file.slice(0,300).text();
+    let rows;
+    if (/UsoCart[ãa]o|MACHINE_UTILIZATION|Uso de M[áa]quina/i.test(sniff) || /<html|<table/i.test(sniff)) {
+      rows = parseHtmlCartao(await file.text());
+    } else {
+      if (!window.XLSX) await new Promise(r => { const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload=r; document.head.appendChild(s); });
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type:'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false }).map(o => { const n={}; for(const k of Object.keys(o)) n[k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_')] = o[k]; return n; });
+    }
+    const totalCy = rows.reduce((s,r) => s + ((+r.lavagens||0)+(+r.secagens||0)), 0);
+    result.innerHTML = `<div class="p-4 bg-purple-50 rounded-xl text-sm">✓ ${rows.length} condomínios · ${_int(totalCy)} ciclos · enviando...</div>`;
+    const r = await fetch('/api/repasse/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rows }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail||d.error);
+    const okRows = d.results.filter(x => x.ok);
+    const totRep = okRows.reduce((s,x)=>s+(x.repasse||0),0);
+    result.innerHTML = `
+      <div class="p-4 bg-green-50 border border-green-200 rounded-xl text-sm mb-3">
+        <b class="text-green-700">${d.processed}/${d.total} processados</b> · Total repassado: <b>${_money(totRep)}</b>
+      </div>
+      <div class="max-h-96 overflow-y-auto"><table class="w-full text-xs">
+        <thead class="bg-gray-50"><tr>
+          <th class="text-left p-2">Entrada</th><th class="text-left p-2">Match</th>
+          <th class="text-right p-2">Mês</th><th class="text-right p-2">Ciclos</th>
+          <th class="text-right p-2">Repasse</th><th class="text-left p-2">Status</th>
+        </tr></thead>
+        <tbody>${d.results.map(x => `<tr class="border-t">
+          <td class="p-2 truncate max-w-[200px]">${esc(x.condoName||'—')}</td>
+          <td class="p-2 truncate max-w-[200px]">${esc(x.condo_name||'—')}</td>
+          <td class="p-2 text-right">${x.month||'—'}</td>
+          <td class="p-2 text-right">${x.cycles||'—'}</td>
+          <td class="p-2 text-right">${x.repasse?_money(x.repasse):'—'}</td>
+          <td class="p-2">${x.ok?'<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">✓</span>':'<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">'+x.reason+'</span>'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+  } catch (e) {
+    result.innerHTML = `<div class="p-4 bg-red-50 text-red-700 rounded-xl text-sm">❌ ${esc(e.message)}</div>`;
+  }
+}
+function parseHtmlCartao(html) {
+  const per = html.match(/De:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*At[eé]:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+  let month = null;
+  if (per) { const [d,m,y] = per[2].split('/'); month = `${y.length===2?'20'+y:y}-${m.padStart(2,'0')}`; }
+  const pdvRe = /<h4 class="ng-binding">([^<]+)<\/h4>\s*<h5[^>]*>[^<]*<span[^>]*>Total Geral do Ponto de Venda[^<]*<\/span>[^<]*?([\d.,]+)/g;
+  const list = []; let m;
+  while ((m = pdvRe.exec(html))) list.push({ name: m[1].trim(), start: m.index });
+  const out = [];
+  for (let i=0; i<list.length; i++) {
+    const end = i+1<list.length ? list[i+1].start : html.length;
+    const sec = html.slice(list[i].start, end);
+    const w = (sec.match(/>\s*LAVADORA[^<]*</g) || []).length;
+    const d = (sec.match(/>\s*SECADORA[^<]*</g) || []).length;
+    const nome = list[i].name.replace(/^LAVANDERY\s*[-–]\s*/i,'').replace(/^COND\.?\s+/i,'Condomínio ').trim();
+    out.push({ condominio: nome, mes: month, lavagens: w, secagens: d });
+  }
+  return out;
+}
+
+document.querySelector('#downloadSample')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  const csv = 'condominio,mes,lavagens,secagens,valor_ciclo,imposto\nCondomínio Exemplo,2026-02,400,300,2.50,32.25\n';
+  const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='modelo-lavandery.csv'; a.click();
+});
+
+// ---------- CONDOS VIEW ----------
+let _cView = [];
+async function loadCondosView() {
+  _cView = await fetch('/api/condominiums').then(r => r.ok?r.json():[]);
+  _cView.sort((a,b) => (a.contract_name||a.name||'').localeCompare(b.contract_name||b.name||''));
+  // YTD por condo
+  const year = String(new Date().getFullYear());
+  const results = await Promise.all(_cView.map(c => fetch('/api/condominiums/'+c.id+'/repasse').then(r=>r.ok?r.json():[]).then(arr => arr.filter(x=>(x.month||'').startsWith(year)).reduce((s,x)=>s+(x.repasse_liquido||0),0)).catch(()=>0)));
+  _cView.forEach((c,i) => c._ytd = results[i]);
+  renderCondosView();
+}
+function renderCondosView(filter='') {
+  const f = (filter||'').toLowerCase();
+  const list = _cView.filter(c => !f || (c.contract_name||c.name||'').toLowerCase().includes(f));
+  document.querySelector('#cTotal').textContent = _cView.length;
+  document.querySelector('#cConfig').textContent = _cView.filter(c => c.cycle_rate).length;
+  document.querySelector('#cMachines').textContent = _cView.reduce((s,c)=>s+(c.washers||0)+(c.dryers||0),0);
+  document.querySelector('#condoRows').innerHTML = list.map(c => `
+    <tr class="border-t border-gray-100 hover:bg-purple-50/30 cursor-pointer" onclick="location.href='/admin.html#condo/${c.id}'">
+      <td class="py-3 px-4 font-medium">${esc((c.contract_name||c.name||'—').toUpperCase())}</td>
+      <td class="py-3 px-4 text-center">${c.washers||0}</td>
+      <td class="py-3 px-4 text-center">${c.dryers||0}</td>
+      <td class="py-3 px-4 text-right">${c.cycle_price?_money(c.cycle_price):'—'}</td>
+      <td class="py-3 px-4 text-right">${c.cycle_rate?_money(c.cycle_rate):'<span class="text-red-500 text-xs">sem</span>'}</td>
+      <td class="py-3 px-4 text-right">${c.tax_rate||0}%</td>
+      <td class="py-3 px-4 text-right font-semibold text-purple-700">${_money(c._ytd||0)}</td>
+      <td class="py-3 px-4"><a href="/admin.html#condo/${c.id}" class="text-purple-600 text-xs font-semibold">abrir →</a></td>
+    </tr>`).join('');
+}
+document.querySelector('#condoSearch')?.addEventListener('input', e => renderCondosView(e.target.value));
+
+// PDF
+document.querySelector('#dashPdf')?.addEventListener('click', () => {
+  const year = document.querySelector('#dashYear').value;
+  window.open('/api/repasses/report.pdf?month=' + year + '-01', '_blank');
+});
+
+// Carrega dashboard no início
+loadDashboard();
+</script>
+</body>
+</html>
