@@ -750,29 +750,31 @@ app.delete('/api/implantation-checklist-items/:id', (req,res) => {
 
 // Marcar várias implantações como concluídas (bulk, pulando passo a passo)
 app.post('/api/implantations/bulk-complete', (req, res) => {
-  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  if (!req.user || !['admin','gestor','tecnico'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   const { ids } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error:'no_ids' });
   const now = Date.now();
-  const updImp = db.prepare(`UPDATE implantations SET status='concluida', completed_at=COALESCE(completed_at,?), updated_at=? WHERE id=?`);
+  const updImp = db.prepare(`UPDATE implantations SET status='concluida', completed_at=COALESCE(completed_at,?) WHERE id=?`);
   const updSteps = db.prepare(`UPDATE implantation_steps SET completed=1, completed_at=COALESCE(completed_at,?), status='concluida' WHERE implantation_id=? AND completed=0`);
+  const insLog = db.prepare(`INSERT INTO implantation_logs (id, implantation_id, actor, action, target_type, target_id, data, at) VALUES (?,?,?,?,?,?,?,?)`);
   let completed = 0;
+  const errors = [];
   const tx = db.transaction(() => {
     for (const id of ids) {
-      const r = updImp.run(now, now, id);
-      if (r.changes > 0) {
-        updSteps.run(now, id);
-        completed++;
-        // Log
-        try {
-          db.prepare(`INSERT INTO implantation_logs (id, implantation_id, event, message, created_at) VALUES (?,?,?,?,?)`)
-            .run('log_'+Math.random().toString(36).slice(2,10), id, 'bulk_completed', 'Marcada como concluída via bulk (pulando passo a passo)', now);
-        } catch {}
-      }
+      try {
+        const r = updImp.run(now, id);
+        if (r.changes > 0) {
+          updSteps.run(now, id);
+          completed++;
+          try {
+            insLog.run('log_'+Math.random().toString(36).slice(2,10), id, req.user.name||'admin', 'bulk_completed', 'implantation', id, JSON.stringify({ via:'bulk' }), now);
+          } catch {}
+        }
+      } catch (e) { errors.push({ id, error: String(e.message||e) }); }
     }
   });
-  tx();
-  res.json({ ok:true, completed, requested: ids.length });
+  try { tx(); } catch (e) { return res.status(500).json({ error:'tx_failed', detail: String(e.message||e) }); }
+  res.json({ ok:true, completed, requested: ids.length, errors });
 });
 
 // Reset template v2 para uma implantação existente
@@ -2441,6 +2443,96 @@ app.get('/api/autentique/contracts', async (req, res) => {
 });
 
 // Bulk import condos from selected Autentique contracts (with optional overrides)
+// Apaga TUDO: condomínios + relacionados (máquinas, visitas, chamados, implantações, repasses etc via CASCADE)
+app.post('/api/condominiums/wipe-all', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error:'admin_only' });
+  const { confirm } = req.body || {};
+  if (confirm !== 'SIM APAGAR TUDO') return res.status(400).json({ error:'missing_confirmation', hint:'envie body={"confirm":"SIM APAGAR TUDO"}' });
+  const before = db.prepare('SELECT COUNT(*) c FROM condominiums').get().c;
+  db.prepare('DELETE FROM condominiums').run();
+  // Limpa também dados que não têm FK
+  db.prepare('DELETE FROM cycle_logs').run();
+  db.prepare('DELETE FROM condo_payments').run();
+  db.prepare('DELETE FROM condo_repasse').run();
+  db.prepare('DELETE FROM visits_schedule').run();
+  db.prepare('DELETE FROM tickets').run();
+  db.prepare('DELETE FROM implantations').run();
+  db.prepare('DELETE FROM supply_requests').run();
+  // Cria usuários condo também some (mantém admin/tecnico)
+  db.prepare("DELETE FROM users WHERE role='condo'").run();
+  res.json({ ok:true, deleted: before });
+});
+
+// Importa do Autentique apenas contratos 100% ASSINADOS e que sejam de condomínio real
+app.post('/api/condominiums/auto-import-signed', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    // 1) Busca todos os contratos do cache (já importados antes) + fetch na Autentique
+    const docs = await listAllDocuments({ context: 'ORGANIZATION', pageSize: 60 });
+    const cache = Object.fromEntries(
+      db.prepare('SELECT document_id, extracted FROM contract_cache').all()
+        .map(c => [c.document_id, JSON.parse(c.extracted||'null')])
+    );
+
+    const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    const isCondoName = n => {
+      const s = String(n||'').toUpperCase();
+      if (/FERIAS\s+COLETIVAS|REGISTRO\s*BR|^TESTE|^MINUTA|CANCELAMENTO/i.test(s)) return false;
+      return /CONDOM[ÍI]NIO|EDIF[ÍI]CIO|RESIDENCIAL|EDILICIO|CONJUNTO|HABITAT/i.test(s);
+    };
+    const isFullySigned = (doc) => {
+      if (!doc.signatures || !doc.signatures.length) return false;
+      // Todos os signatários que têm `action.name === 'SIGN'` precisam ter `signed.created_at`
+      const signers = doc.signatures.filter(s => !s.action || s.action.name === 'SIGN' || s.action.name === 'SIGNER');
+      if (!signers.length) return false;
+      return signers.every(s => s.signed && s.signed.created_at);
+    };
+
+    // 2) Filtra
+    const candidates = docs.data.filter(doc => {
+      const ext = cache[doc.id];
+      const name = ext?.name || doc.name || '';
+      if (!isCondoName(name)) return false;
+      if (!isFullySigned(doc)) return false;
+      return true;
+    });
+
+    // 3) Upsert condos
+    const upsertCondo = db.prepare(`INSERT INTO condominiums
+      (id,name,address,city,cep,cnpj,washers,dryers,contract_source,autentique_doc_id,maintenance_interval_months,maintenance_label,is_contract)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)
+      ON CONFLICT(id) DO UPDATE SET name=excluded.name, autentique_doc_id=excluded.autentique_doc_id,
+        address=COALESCE(excluded.address, condominiums.address),
+        city=COALESCE(excluded.city, condominiums.city),
+        cep=COALESCE(excluded.cep, condominiums.cep),
+        cnpj=COALESCE(excluded.cnpj, condominiums.cnpj)`);
+    const insMachine = db.prepare(`INSERT OR IGNORE INTO machines (id,condo_id,code,type,brand,capacity) VALUES (?,?,?,?,?,?)`);
+
+    let imported = 0;
+    for (const doc of candidates) {
+      const ext = cache[doc.id] || {};
+      const name = (ext.name || doc.name || '').toString().toUpperCase().trim()
+        .replace(/^CONTRATO[-\s_]+(COMODATO|GEST[ÃA]O|SERVI[ÇC]O)[-\s_]+/i,'')
+        .replace(/\s*\(\d+\)\s*$/g,'').replace(/\s+/g,' ').trim();
+      const id = 'c_' + norm(name).slice(0, 24);
+      if (!id || id.length < 5) continue;
+      const w = ext.washers|0, d = ext.dryers|0;
+      const freq = ext.maintenance?.intervalMonths || null;
+      const label = ext.maintenance?.label || null;
+      upsertCondo.run(id, name,
+        ext.address||'', ext.city||'', ext.cep||null, ext.cnpj||null,
+        w, d, 'autentique', doc.id, freq, label);
+      for (let i=1;i<=w;i++) insMachine.run(`${id}_lvd${i}`, id, `LVD-${String(i).padStart(3,'0')}`, 'Lavadora', '', '');
+      for (let i=1;i<=d;i++) insMachine.run(`${id}_scr${i}`, id, `SCR-${String(i).padStart(3,'0')}`, 'Secadora', '', '');
+      imported++;
+    }
+    res.json({ ok:true, total_contracts: docs.data.length, signed_condo_contracts: candidates.length, imported });
+  } catch (e) {
+    console.error('[auto-import-signed]', e);
+    res.status(500).json({ error:'import_failed', detail: String(e.message||e) });
+  }
+});
+
 app.post('/api/condominiums/import', (req, res) => {
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: 'no_items' });
