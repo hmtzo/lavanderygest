@@ -2138,178 +2138,526 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
   try {
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-    const W = 595, H = 842, pad = 40;
+    const W = 595, H = 842;
     const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-    const pct = (cur, prev) => prev ? (((cur-prev)/prev)*100).toFixed(1) + '%' : '—';
+    const num = n => (+n||0).toLocaleString('pt-BR');
     const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
     const [y, mo] = month.split('-');
     const mesNome = meses[parseInt(mo,10)-1];
     const prevMesNome = prev ? meses[parseInt(prevMonth.split('-')[1],10)-1] : null;
 
-    function checkPage(yCur, need=80) {
-      if (yCur + need > H - 60) { doc.addPage(); return 50; }
-      return yCur;
-    }
-    function sectionTitle(text, yy) {
-      doc.setFillColor(83,60,157); doc.rect(pad-4, yy-14, 3, 18, 'F');
-      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(30);
-      doc.text(text.toUpperCase(), pad+8, yy);
-      return yy + 22;
-    }
-    function tableRow(yy, label, qty, val, isTotal) {
-      if (isTotal) {
-        doc.setFillColor(245,240,255);
-        doc.rect(pad-4, yy-12, W-2*pad+8, 22, 'F');
-        doc.setFont('helvetica','bold'); doc.setTextColor(83,60,157);
-      } else {
-        doc.setFont('helvetica','normal'); doc.setTextColor(60);
-      }
-      doc.text(label, pad, yy);
-      if (qty !== '' && qty != null) doc.text(String(qty), 340, yy, { align: 'right' });
-      doc.text(val, W-pad, yy, { align: 'right' });
-      return yy + 22;
-    }
-    function paragraph(text, yy, opts={}) {
-      doc.setFont(opts.italic?'helvetica':'helvetica', opts.italic?'italic':'normal');
-      doc.setFontSize(opts.size||10); doc.setTextColor(opts.color||80);
-      const lines = doc.splitTextToSize(text, W - 2*pad);
-      doc.text(lines, pad, yy);
-      return yy + lines.length * 14 + 6;
-    }
+    // ========== PALETA ==========
+    const BRAND = [83, 60, 157];       // Roxo primário
+    const BRAND_LIGHT = [168, 134, 235];
+    const BRAND_LIGHTER = [246, 240, 255];
+    const ACCENT = [255, 182, 72];     // Dourado para destaques
+    const GREEN = [16, 185, 129];
+    const RED = [239, 68, 68];
+    const GRAY_50 = [248, 246, 252];
+    const GRAY_100 = [232, 227, 241];
+    const GRAY_400 = [148, 148, 176];
+    const GRAY_700 = [75, 68, 88];
+    const INK = [31, 26, 51];
 
-    // ============== PÁGINA 1 ==============
-    // Header Lavandery
-    doc.setFillColor(83, 60, 157); doc.rect(0, 0, W, 90, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(24);
-    doc.text('LAVANDERY', pad, 40);
+    // ============== PÁGINA 1 — CAPA ==============
+    // Background gradiente simulado com blocos
+    doc.setFillColor(...BRAND); doc.rect(0, 0, W, H, 'F');
+    // Camadas de destaque
+    doc.setFillColor(43, 31, 92); doc.rect(0, 0, W, 280, 'F');
+    // Circle pattern decorativo
+    doc.setFillColor(...BRAND_LIGHT); doc.circle(W-60, 120, 140, 'F');
+    doc.setFillColor(...BRAND); doc.circle(W-60, 120, 140, 'F');
+    doc.setFillColor(168, 134, 235, 'F');
+
+    // LAVANDERY logo text
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(28);
+    doc.text('LAVANDERY', 50, 80);
     doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
-    doc.text('Lavanderia compartilhada inteligente', pad, 56);
-    doc.setFontSize(12); doc.setFont('helvetica','bold');
-    doc.text(`Relatório Mensal de Repasse`, pad, 76);
-    doc.setFont('helvetica','normal'); doc.setFontSize(13);
-    doc.text(`${mesNome} / ${y}`, W-pad, 76, { align: 'right' });
+    doc.setTextColor(200, 190, 230);
+    doc.text('LAVANDERIA COMPARTILHADA INTELIGENTE', 50, 98);
 
-    // Bloco do condomínio
-    doc.setTextColor(30);
-    doc.setFont('helvetica','bold'); doc.setFontSize(17);
-    doc.text((condo.name||'').toUpperCase(), pad, 125);
-    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(100);
-    let yHead = 143;
-    if (condo.address) { doc.text(condo.address, pad, yHead); yHead += 14; }
-    if (condo.city || condo.cep) { doc.text([condo.city, condo.cep].filter(Boolean).join(' · '), pad, yHead); yHead += 14; }
-    if (condo.cnpj) { doc.text(`CNPJ: ${condo.cnpj}`, pad, yHead); yHead += 14; }
-    doc.setDrawColor(220); doc.line(pad, yHead+4, W-pad, yHead+4);
+    // Título principal
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(36);
+    doc.text('Relatório', 50, 200);
+    doc.setTextColor(...ACCENT);
+    doc.text('de Repasse', 50, 240);
 
-    let yy = yHead + 22;
-    // --- Intro ---
-    yy = paragraph(
-      `Prezado síndico/administrador, apresentamos abaixo o relatório detalhado dos serviços de lavanderia compartilhada prestados neste condomínio durante o mês de ${mesNome} de ${y}. Este documento contém a contabilização completa de ciclos realizados, cálculo do repasse devido ao condomínio, dedução de impostos e taxas, e as instruções para recebimento.`,
-      yy, { italic: true, color: 90 }
-    );
-    yy += 8;
+    // Subtítulo mês
+    doc.setTextColor(255); doc.setFont('helvetica','normal'); doc.setFontSize(16);
+    doc.text(`${mesNome.toUpperCase()} · ${y}`, 50, 268);
 
-    // --- RESUMO OPERACIONAL ---
-    yy = sectionTitle('1. Resumo Operacional', yy);
+    // Card principal do condomínio - glass effect
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(50, 330, W-100, 140, 16, 16, 'F');
+    // Linha colorida lateral
+    doc.setFillColor(...ACCENT);
+    doc.roundedRect(50, 330, 5, 140, 2, 2, 'F');
+
+    doc.setTextColor(...GRAY_400); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.text('CONDOMÍNIO', 72, 358);
+    doc.setTextColor(...INK); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+    const nameLines = doc.splitTextToSize((condo.name||'').toUpperCase(), W - 140);
+    doc.text(nameLines, 72, 380);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...GRAY_700);
+    let infoY = 380 + nameLines.length * 20 + 4;
+    if (condo.address) { doc.text(`📍 ${condo.address}`, 72, infoY); infoY += 14; }
+    if (condo.cnpj) { doc.text(`🏢 CNPJ: ${condo.cnpj}`, 72, infoY); infoY += 14; }
+
+    // HERO NUMBER — valor final gigante
+    doc.setFillColor(255, 255, 255, 'F');
+    doc.roundedRect(50, 500, W-100, 200, 16, 16, 'F');
+    // Accent gold bar
+    doc.setFillColor(...ACCENT); doc.roundedRect(50, 500, W-100, 6, 2, 2, 'F');
+
+    doc.setTextColor(...GRAY_400); doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    doc.text('VALOR LÍQUIDO A RECEBER', W/2, 540, { align: 'center' });
+
+    doc.setTextColor(...BRAND); doc.setFont('helvetica','bold'); doc.setFontSize(48);
+    doc.text(money(r.repasse_liquido), W/2, 600, { align: 'center' });
+
     const cycles = r.cycles || ((r.washes||0) + (r.dries||0));
+    doc.setTextColor(...GRAY_700); doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    doc.text(`Referente a ${num(cycles)} ciclos realizados em ${mesNome}/${y}`, W/2, 626, { align: 'center' });
+
+    // Mini stats inline
+    const stats = [
+      { label: 'Lavagens', value: num(r.washes||0), color: BRAND },
+      { label: 'Secagens', value: num(r.dries||0), color: BRAND_LIGHT },
+      { label: 'Receita bruta', value: money(r.repasse_bruto), color: ACCENT },
+    ];
+    const statW = (W - 140) / 3;
+    stats.forEach((s, i) => {
+      const sx = 72 + i * statW;
+      doc.setTextColor(...GRAY_400); doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.text(s.label.toUpperCase(), sx, 660);
+      doc.setTextColor(...s.color); doc.setFont('helvetica','bold'); doc.setFontSize(14);
+      doc.text(s.value, sx, 680);
+    });
+
+    // Badge de período
+    doc.setFillColor(...ACCENT);
+    doc.roundedRect(50, 750, 120, 32, 16, 16, 'F');
+    doc.setTextColor(...INK); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text(`📅 ${mesNome.slice(0,3)}/${y}`, 110, 770, { align: 'center' });
+
+    // Selo de autenticidade
+    doc.setTextColor(200, 190, 230); doc.setFont('helvetica','italic'); doc.setFontSize(9);
+    doc.text('Documento oficial · gerado automaticamente', W-50, 770, { align: 'right' });
+
+    // ============== PÁGINA 2 — BREAKDOWN ==============
+    doc.addPage();
+    doc.setFillColor(...GRAY_50); doc.rect(0, 0, W, H, 'F');
+    // Header suave
+    doc.setFillColor(...BRAND); doc.rect(0, 0, W, 70, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.text('LAVANDERY', 40, 35);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.text(`${mesNome} / ${y}`, W-40, 35, { align: 'right' });
+    doc.setFontSize(9); doc.setTextColor(220, 215, 240);
+    doc.text((condo.name||'').toUpperCase(), 40, 54);
+    doc.text('Relatório de Repasse', W-40, 54, { align: 'right' });
+
+    let yy = 110;
+
+    // ---------- SEÇÃO: COMO SEU REPASSE FOI CALCULADO ----------
+    doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(...INK);
+    doc.text('Como seu repasse foi calculado', 40, yy);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...GRAY_700);
+    doc.text('Detalhamento completo dos ciclos, faturamento e deduções aplicadas.', 40, yy + 18);
+    yy += 50;
+
+    // Cards lado a lado — Lavagens/Secagens
+    const cardW = (W - 90) / 2;
+    // Card Lavagens
+    doc.setFillColor(255,255,255); doc.roundedRect(40, yy, cardW, 100, 12, 12, 'F');
+    doc.setFillColor(...BRAND); doc.roundedRect(40, yy, cardW, 4, 2, 2, 'F');
+    doc.setTextColor(...BRAND); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('💧 LAVAGENS', 56, yy + 28);
+    doc.setTextColor(...INK); doc.setFontSize(32);
+    doc.text(num(r.washes||0), 56, yy + 62);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...GRAY_700);
     const unitRate = r.type === 'fixed' ? r.value : (r.price > 0 ? (r.value/100 * r.price) : 0);
-    const washValue = (r.washes||0) * unitRate;
-    const dryValue = (r.dries||0) * unitRate;
+    doc.text(`× ${money(unitRate)} = ${money((r.washes||0) * unitRate)}`, 56, yy + 82);
 
-    yy = tableRow(yy, 'Total de ciclos de lavagem', r.washes||0, money(washValue));
-    yy = tableRow(yy, 'Total de ciclos de secagem', r.dries||0, money(dryValue));
-    yy = tableRow(yy, 'Total geral de ciclos', cycles, '');
-    yy = tableRow(yy, r.type==='fixed' ? 'Valor de repasse por ciclo' : `Percentual de repasse`, '', r.type==='fixed' ? money(r.value) : `${r.value}%`);
-    if (r.price) yy = tableRow(yy, 'Valor do ciclo cobrado do usuário', '', money(r.price));
-    yy += 8;
+    // Card Secagens
+    doc.setFillColor(255,255,255); doc.roundedRect(50 + cardW, yy, cardW, 100, 12, 12, 'F');
+    doc.setFillColor(...BRAND_LIGHT); doc.roundedRect(50 + cardW, yy, cardW, 4, 2, 2, 'F');
+    doc.setTextColor(...BRAND_LIGHT[0], BRAND_LIGHT[1], BRAND_LIGHT[2]); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('🌀 SECAGENS', 66 + cardW, yy + 28);
+    doc.setTextColor(...INK); doc.setFontSize(32);
+    doc.text(num(r.dries||0), 66 + cardW, yy + 62);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...GRAY_700);
+    doc.text(`× ${money(unitRate)} = ${money((r.dries||0) * unitRate)}`, 66 + cardW, yy + 82);
+    yy += 120;
 
-    // --- MEMÓRIA DE CÁLCULO ---
-    yy = checkPage(yy, 160);
-    yy = sectionTitle('2. Memória de cálculo', yy);
-    yy = paragraph(
-      r.type === 'fixed'
-        ? `O valor bruto de repasse é calculado multiplicando-se o total de ciclos (${cycles}) pelo valor de reembolso por ciclo (${money(r.value)}), resultando em ${money(r.repasse_bruto)}.`
-        : `O valor bruto de repasse é calculado aplicando-se ${r.value}% sobre o faturamento bruto das máquinas (${cycles} ciclos × ${money(r.price)} = ${money(cycles * r.price)}), resultando em ${money(r.repasse_bruto)}.`,
-      yy, { color: 60 }
-    );
-    yy = paragraph(
-      `Sobre o valor bruto de repasse incide a alíquota de ${r.tax_pct||0}% (ICMS, PIS, COFINS, ISS e taxa de processamento de cartão), totalizando ${money(r.imposto)} em impostos e taxas deduzidas.`,
-      yy, { color: 60 }
-    );
-    yy = paragraph(
-      `Dessa forma, o valor líquido a ser repassado ao condomínio é de ${money(r.repasse_liquido)}.`,
-      yy, { color: 60 }
-    );
-    yy += 8;
+    // Cálculo visual — fluxo com setas
+    doc.setFillColor(255,255,255); doc.roundedRect(40, yy, W - 80, 170, 12, 12, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...INK);
+    doc.text('FÓRMULA DO REPASSE', 56, yy + 24);
 
-    // --- TABELA FINANCEIRA ---
-    yy = checkPage(yy, 180);
-    yy = sectionTitle('3. Composição financeira', yy);
-    yy = tableRow(yy, 'Valor bruto de repasse', '', money(r.repasse_bruto), true);
-    yy = tableRow(yy, `(–) Impostos e taxas (${r.tax_pct||0}%)`, '', money(r.imposto));
-    yy = tableRow(yy, '= TOTAL A REPASSAR AO CONDOMÍNIO', '', money(r.repasse_liquido), true);
-    yy += 10;
+    // Três blocos com operações
+    const blockY = yy + 44;
+    const blockW = (W - 80 - 48) / 3;
+    // Valor bruto
+    doc.setFillColor(...BRAND_LIGHTER); doc.roundedRect(56, blockY, blockW, 100, 10, 10, 'F');
+    doc.setTextColor(...BRAND); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text('1. VALOR BRUTO', 56 + blockW/2, blockY + 22, { align: 'center' });
+    doc.setFontSize(16); doc.setTextColor(...INK);
+    doc.text(money(r.repasse_bruto), 56 + blockW/2, blockY + 50, { align: 'center' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GRAY_700);
+    doc.text(`${num(cycles)} ciclos`, 56 + blockW/2, blockY + 68, { align: 'center' });
+    doc.text(r.type==='fixed'?`× ${money(r.value)}/ciclo`:`× ${r.value}% da receita`, 56 + blockW/2, blockY + 82, { align: 'center' });
 
-    // --- COMPARATIVO ---
-    yy = checkPage(yy, 140);
-    yy = sectionTitle('4. Comparativo histórico', yy);
+    // Seta
+    doc.setTextColor(...GRAY_400); doc.setFontSize(18);
+    doc.text('→', 56 + blockW + 12, blockY + 55);
+
+    // Imposto
+    doc.setFillColor(254, 242, 242); doc.roundedRect(56 + blockW + 28, blockY, blockW, 100, 10, 10, 'F');
+    doc.setTextColor(...RED); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text('2. (−) IMPOSTOS', 56 + blockW*1.5 + 28, blockY + 22, { align: 'center' });
+    doc.setFontSize(16); doc.setTextColor(...INK);
+    doc.text(money(r.imposto), 56 + blockW*1.5 + 28, blockY + 50, { align: 'center' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GRAY_700);
+    doc.text(`${r.tax_pct||0}% sobre bruto`, 56 + blockW*1.5 + 28, blockY + 68, { align: 'center' });
+    doc.text(`ICMS+PIS+COFINS+ISS+tx`, 56 + blockW*1.5 + 28, blockY + 82, { align: 'center' });
+
+    // Seta
+    doc.setTextColor(...GRAY_400); doc.setFontSize(18);
+    doc.text('=', 56 + blockW*2 + 40, blockY + 55);
+
+    // Líquido
+    doc.setFillColor(236, 253, 245); doc.roundedRect(56 + blockW*2 + 56, blockY, blockW, 100, 10, 10, 'F');
+    doc.setTextColor(...GREEN); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text('3. LÍQUIDO A RECEBER', 56 + blockW*2.5 + 56, blockY + 22, { align: 'center' });
+    doc.setFontSize(16); doc.setTextColor(...INK);
+    doc.text(money(r.repasse_liquido), 56 + blockW*2.5 + 56, blockY + 50, { align: 'center' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GREEN);
+    doc.text('✓ DEPÓSITO EM 10 DIAS', 56 + blockW*2.5 + 56, blockY + 72, { align: 'center' });
+    yy += 190;
+
+    // Donut chart representando divisão Condomínio vs Imposto
+    yy = 560;
+    doc.setFillColor(255,255,255); doc.roundedRect(40, yy, W - 80, 200, 12, 12, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...INK);
+    doc.text('DIVISÃO DO VALOR BRUTO', 56, yy + 24);
+
+    // Desenha donut com 2 arcos
+    const cx = 130, cy = yy + 115, radius = 60, thickness = 18;
+    const total = (r.repasse_bruto||1);
+    const condoPct = (r.repasse_liquido||0) / total;
+    const taxPct = (r.imposto||0) / total;
+
+    // Background circle
+    doc.setFillColor(...GRAY_100);
+    doc.circle(cx, cy, radius, 'F');
+    doc.setFillColor(255,255,255);
+    doc.circle(cx, cy, radius - thickness, 'F');
+
+    // Condo slice (green) — desenhado com arcos
+    function drawArc(cx, cy, radius, thickness, startPct, endPct, color) {
+      const steps = Math.max(20, Math.floor((endPct - startPct) * 60));
+      doc.setFillColor(...color);
+      for (let i = 0; i < steps; i++) {
+        const p1 = startPct + (i/steps) * (endPct - startPct);
+        const p2 = startPct + ((i+1)/steps) * (endPct - startPct);
+        const a1 = (p1 * 360 - 90) * Math.PI / 180;
+        const a2 = (p2 * 360 - 90) * Math.PI / 180;
+        const r1 = radius, r2 = radius - thickness;
+        const x1 = cx + Math.cos(a1) * r1, y1 = cy + Math.sin(a1) * r1;
+        const x2 = cx + Math.cos(a2) * r1, y2 = cy + Math.sin(a2) * r1;
+        const x3 = cx + Math.cos(a2) * r2, y3 = cy + Math.sin(a2) * r2;
+        const x4 = cx + Math.cos(a1) * r2, y4 = cy + Math.sin(a1) * r2;
+        doc.lines([[x2-x1,y2-y1],[x3-x2,y3-y2],[x4-x3,y4-y3],[x1-x4,y1-y4]], x1, y1, [1,1], 'F');
+      }
+    }
+    drawArc(cx, cy, radius, thickness, 0, condoPct, GREEN);
+    drawArc(cx, cy, radius, thickness, condoPct, 1, RED);
+
+    // Label no centro
+    doc.setTextColor(...INK); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.text(`${Math.round(condoPct*100)}%`, cx, cy + 5, { align: 'center' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY_700);
+    doc.text('PRA VOCÊ', cx, cy + 20, { align: 'center' });
+
+    // Legenda lateral
+    const legX = 230;
+    doc.setFillColor(...GREEN); doc.roundedRect(legX, yy + 60, 12, 12, 2, 2, 'F');
+    doc.setTextColor(...INK); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text(`Condomínio`, legX + 22, yy + 70);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...GRAY_700);
+    doc.text(`${money(r.repasse_liquido)} · ${Math.round(condoPct*100)}%`, legX + 22, yy + 86);
+
+    doc.setFillColor(...RED); doc.roundedRect(legX, yy + 110, 12, 12, 2, 2, 'F');
+    doc.setTextColor(...INK); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text(`Impostos & Taxas`, legX + 22, yy + 120);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...GRAY_700);
+    doc.text(`${money(r.imposto)} · ${r.tax_pct||0}%`, legX + 22, yy + 136);
+
+    // Box de comparativo (direita do donut)
+    const compX = 380, compY = yy + 50;
+    doc.setFillColor(...BRAND_LIGHTER); doc.roundedRect(compX, compY, W - compX - 56, 120, 10, 10, 'F');
+    doc.setTextColor(...BRAND); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('COMPARATIVO', compX + 14, compY + 20);
     if (prev) {
-      yy = tableRow(yy, `Ciclos em ${prevMesNome}/${prevMonth.split('-')[0]}`, prev.cycles||0, money(prev.repasse_liquido));
       const cyDelta = cycles - (prev.cycles||0);
       const repDelta = (r.repasse_liquido||0) - (prev.repasse_liquido||0);
-      yy = tableRow(yy, 'Variação de ciclos', `${cyDelta>=0?'+':''}${cyDelta}`, pct(cycles, prev.cycles));
-      yy = tableRow(yy, 'Variação de repasse', `${repDelta>=0?'+':''}${money(repDelta)}`, pct(r.repasse_liquido, prev.repasse_liquido));
+      const pctRep = prev.repasse_liquido ? ((repDelta/prev.repasse_liquido)*100).toFixed(1) : 0;
+      doc.setTextColor(...GRAY_700); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text(`vs ${prevMesNome}/${prevMonth.split('-')[0]}`, compX + 14, compY + 38);
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      doc.setTextColor(...(repDelta >= 0 ? GREEN : RED));
+      doc.text(`${repDelta >= 0 ? '↑' : '↓'} ${pctRep}%`, compX + 14, compY + 58);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...GRAY_700);
+      doc.text(`${repDelta >= 0 ? '+' : '−'} ${money(Math.abs(repDelta))}`, compX + 14, compY + 74);
+      doc.text(`${cyDelta >= 0 ? '+' : ''}${cyDelta} ciclos`, compX + 14, compY + 90);
     } else {
-      yy = paragraph('Este é o primeiro repasse registrado para este condomínio.', yy, { italic: true, color: 120 });
+      doc.setTextColor(...GRAY_700); doc.setFont('helvetica','italic'); doc.setFontSize(9);
+      doc.text('Primeiro repasse registrado.', compX + 14, compY + 60);
     }
-    if (avg6m > 0) {
-      yy += 4;
-      yy = tableRow(yy, 'Média ciclos últimos 6 meses', avgCycles, money(avg6m));
-    }
-    yy += 8;
 
-    // --- EXPLICAÇÕES ---
-    yy = checkPage(yy, 220);
-    yy = sectionTitle('5. Entendendo seu relatório', yy);
-    yy = paragraph('• Ciclos de lavagem: cada vez que uma máquina lavadora roda um programa completo.', yy, { color: 60 });
-    yy = paragraph('• Ciclos de secagem: cada vez que uma máquina secadora roda um programa completo.', yy, { color: 60 });
-    yy = paragraph('• Valor bruto de repasse: valor total devido ao condomínio antes da dedução de impostos e taxas.', yy, { color: 60 });
-    yy = paragraph('• Impostos e taxas: incluem ICMS, PIS, COFINS, ISS e a taxa da operadora de cartão (pagamentos processados).', yy, { color: 60 });
-    yy = paragraph('• Total a repassar: valor líquido que será creditado na conta bancária indicada pelo condomínio.', yy, { color: 60 });
-    yy += 10;
+    // ============== PÁGINA 3 — DADOS BANCÁRIOS + GLOSSÁRIO ==============
+    doc.addPage();
+    doc.setFillColor(...GRAY_50); doc.rect(0, 0, W, H, 'F');
+    doc.setFillColor(...BRAND); doc.rect(0, 0, W, 70, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.text('LAVANDERY', 40, 35);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.text(`${mesNome} / ${y}`, W-40, 35, { align: 'right' });
+    doc.setFontSize(9); doc.setTextColor(220, 215, 240);
+    doc.text((condo.name||'').toUpperCase(), 40, 54);
 
-    // --- DADOS BANCÁRIOS ---
-    yy = checkPage(yy, 120);
+    yy = 110;
+    doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(...INK);
+    doc.text('Dados para o depósito', 40, yy);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...GRAY_700);
+    doc.text('O valor líquido será creditado na conta abaixo em até 10 dias úteis.', 40, yy + 18);
+    yy += 50;
+
+    // Card bancário premium
     if (condo.bank_name || condo.bank_agency || condo.bank_account) {
-      doc.setFillColor(246, 243, 250);
-      doc.roundedRect(pad, yy, W - 2*pad, 96, 10, 10, 'F');
-      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(83,60,157);
-      doc.text('💳 DADOS PARA O REPASSE', pad + 16, yy + 22);
-      doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(40);
-      doc.text(`Banco: ${condo.bank_name||'—'}`, pad + 16, yy + 42);
-      doc.text(`Agência: ${condo.bank_agency||'—'}`, pad + 16, yy + 58);
-      doc.text(`Conta: ${condo.bank_account||'—'}`, pad + 16, yy + 74);
-      doc.setFontSize(9); doc.setTextColor(120);
-      doc.text('O depósito será efetuado em até 10 dias úteis após a emissão deste relatório.', pad + 16, yy + 90);
-      yy += 110;
+      doc.setFillColor(...INK); doc.roundedRect(40, yy, W - 80, 180, 16, 16, 'F');
+      // Chip dourado
+      doc.setFillColor(...ACCENT); doc.roundedRect(60, yy + 24, 36, 26, 4, 4, 'F');
+      doc.setTextColor(...INK); doc.setFont('helvetica','bold'); doc.setFontSize(7);
+      doc.text('CHIP', 78, yy + 40, { align: 'center' });
+
+      // Banco
+      doc.setTextColor(220, 215, 240); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text('BANCO', 60, yy + 75);
+      doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(14);
+      doc.text(condo.bank_name || '—', 60, yy + 92);
+
+      // Agência e Conta
+      doc.setTextColor(220, 215, 240); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text('AGÊNCIA', 60, yy + 120);
+      doc.text('CONTA', 200, yy + 120);
+      doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      doc.text(condo.bank_agency || '—', 60, yy + 138);
+      doc.text(condo.bank_account || '—', 200, yy + 138);
+
+      // CNPJ
+      doc.setTextColor(220, 215, 240); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text('FAVORECIDO', W - 200, yy + 120);
+      doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      const favLines = doc.splitTextToSize((condo.name||'').toUpperCase(), 160);
+      doc.text(favLines, W - 200, yy + 138);
+
+      yy += 200;
     } else {
-      yy = paragraph('⚠ Dados bancários ainda não cadastrados. Entre em contato com a Lavandery para regularizar o recebimento do repasse.', yy, { color: 180, italic: true });
-      yy += 8;
+      doc.setFillColor(254, 242, 242); doc.roundedRect(40, yy, W - 80, 80, 10, 10, 'F');
+      doc.setTextColor(...RED); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+      doc.text('⚠ Dados bancários não cadastrados', 60, yy + 32);
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...GRAY_700);
+      doc.text('Entre em contato com a Lavandery para cadastrar os dados e receber o repasse.', 60, yy + 52);
+      yy += 100;
     }
 
-    // --- OBSERVAÇÕES / CONTATO ---
-    yy = checkPage(yy, 120);
-    yy = sectionTitle('6. Dúvidas e contato', yy);
-    yy = paragraph('Em caso de qualquer divergência, dúvida sobre o cálculo ou necessidade de esclarecimento, entre em contato conosco pelos canais abaixo. Nossa equipe responderá em até 48 horas úteis.', yy, { color: 60 });
-    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(30);
-    doc.text('📧 financeiro@lavandery.com.br', pad, yy); yy += 14;
-    doc.text('📱 (11) 99999-9999 (WhatsApp)', pad, yy); yy += 14;
-    doc.text('🌐 lavandery.com.br', pad, yy); yy += 14;
+    // ---------- GLOSSÁRIO ----------
+    yy += 20;
+    doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(...INK);
+    doc.text('Entendendo seu relatório', 40, yy); yy += 26;
 
-    // --- TERMO DE ACEITE ---
-    yy = checkPage(yy, 120);
+    const glossary = [
+      ['💧', 'Ciclos de lavagem', 'Cada vez que uma máquina lavadora roda um programa completo.'],
+      ['🌀', 'Ciclos de secagem', 'Cada vez que uma máquina secadora roda um programa completo.'],
+      ['💰', 'Valor bruto', 'Total devido ao condomínio antes da dedução de impostos.'],
+      ['🧾', 'Impostos e taxas', 'ICMS, PIS, COFINS, ISS e taxa da operadora de cartão.'],
+      ['✅', 'Valor líquido', 'O que será creditado na conta bancária do condomínio.'],
+    ];
+    glossary.forEach(([icon, title, desc]) => {
+      doc.setFillColor(255,255,255); doc.roundedRect(40, yy, W - 80, 48, 8, 8, 'F');
+      doc.setFont('helvetica','normal'); doc.setFontSize(16); doc.setTextColor(...INK);
+      doc.text(icon, 58, yy + 30);
+      doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(...BRAND);
+      doc.text(title, 86, yy + 22);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...GRAY_700);
+      doc.text(desc, 86, yy + 38);
+      yy += 56;
+    });
+
+    // ============== PÁGINA 4 — HISTÓRICO + GRÁFICOS ==============
+    doc.addPage();
+    doc.setFillColor(...GRAY_50); doc.rect(0, 0, W, H, 'F');
+    doc.setFillColor(...BRAND); doc.rect(0, 0, W, 70, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.text('LAVANDERY', 40, 35);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.text(`${mesNome} / ${y}`, W-40, 35, { align: 'right' });
+    doc.setFontSize(9); doc.setTextColor(220, 215, 240);
+    doc.text((condo.name||'').toUpperCase(), 40, 54);
+    doc.text('Histórico & Tendências', W-40, 54, { align: 'right' });
+
+    yy = 110;
+    doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(...INK);
+    doc.text('Evolução dos últimos 3 meses', 40, yy);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...GRAY_700);
+    doc.text('Veja como está o desempenho comparado aos meses anteriores.', 40, yy + 18);
+    yy += 50;
+
+    // Pega histórico últimos 3 meses (incluindo o atual)
+    const last3 = [];
+    for (let i = 2; i >= 0; i--) {
+      const d = new Date(month + '-01'); d.setMonth(d.getMonth() - i);
+      const mm = d.toISOString().slice(0,7);
+      if (mm === month) {
+        last3.push({ month: mm, ...r, is_current: true });
+      } else {
+        const row = db.prepare('SELECT * FROM condo_repasse WHERE condo_id=? AND month=?').get(cid, mm);
+        last3.push({ month: mm, cycles: row?.cycles||0, washes: row?.washes||0, dries: row?.dries||0,
+          repasse_liquido: row?.repasse_liquido||0, repasse_bruto: row?.repasse_bruto||0, is_current: false });
+      }
+    }
+
+    // Gráfico de barras comparativas (3 meses)
+    doc.setFillColor(255,255,255); doc.roundedRect(40, yy, W - 80, 240, 14, 14, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...INK);
+    doc.text('CICLOS REALIZADOS', 56, yy + 24);
+
+    const chartX = 56, chartY = yy + 50, chartW = W - 112, chartH = 160;
+    const maxCycles = Math.max(1, ...last3.map(x => x.cycles));
+    const barW = chartW / 3 - 30;
+
+    last3.forEach((entry, idx) => {
+      const bx = chartX + idx * (chartW/3) + 15;
+      const bh = (entry.cycles / maxCycles) * chartH;
+      const by = chartY + (chartH - bh);
+      // Barra
+      const barColor = entry.is_current ? BRAND : BRAND_LIGHT;
+      doc.setFillColor(...barColor);
+      doc.roundedRect(bx, by, barW, bh, 6, 6, 'F');
+      // Valor em cima
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...INK);
+      doc.text(num(entry.cycles), bx + barW/2, by - 8, { align: 'center' });
+      // Mês embaixo
+      const [my, mmo] = entry.month.split('-');
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...GRAY_700);
+      doc.text(meses[parseInt(mmo,10)-1].slice(0,3) + '/' + my.slice(-2), bx + barW/2, chartY + chartH + 16, { align: 'center' });
+      doc.setFontSize(8); doc.setTextColor(...GRAY_400);
+      doc.text(money(entry.repasse_liquido).replace('R$ ',''), bx + barW/2, chartY + chartH + 30, { align: 'center' });
+      // Badge atual
+      if (entry.is_current) {
+        doc.setFillColor(...ACCENT); doc.roundedRect(bx + barW/2 - 20, by - 28, 40, 14, 7, 7, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...INK);
+        doc.text('ATUAL', bx + barW/2, by - 19, { align: 'center' });
+      }
+    });
+    yy += 260;
+
+    // Stats comparativas — 3 KPIs
+    const avg3Cycles = last3.reduce((s,e) => s + (e.cycles||0), 0) / 3;
+    const avg3Repasse = last3.reduce((s,e) => s + (e.repasse_liquido||0), 0) / 3;
+    const best = last3.reduce((b, e) => e.repasse_liquido > (b?.repasse_liquido||0) ? e : b, null);
+    const kpis = [
+      { label: 'MÉDIA 3 MESES', value: money(avg3Repasse), sub: `${Math.round(avg3Cycles)} ciclos/mês` },
+      { label: 'MELHOR MÊS', value: best ? money(best.repasse_liquido) : '—', sub: best ? meses[parseInt(best.month.split('-')[1],10)-1].slice(0,3) + '/' + best.month.split('-')[0].slice(-2) : '' },
+      { label: 'ESTE MÊS', value: money(r.repasse_liquido), sub: `${num(cycles)} ciclos` },
+    ];
+    const kpiW = (W - 80 - 24) / 3;
+    kpis.forEach((k, i) => {
+      const kx = 40 + i * (kpiW + 12);
+      doc.setFillColor(255,255,255); doc.roundedRect(kx, yy, kpiW, 80, 10, 10, 'F');
+      doc.setFillColor(...BRAND); doc.roundedRect(kx, yy, kpiW, 3, 2, 2, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...BRAND);
+      doc.text(k.label, kx + 12, yy + 22);
+      doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(...INK);
+      doc.text(k.value, kx + 12, yy + 48);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GRAY_700);
+      doc.text(k.sub, kx + 12, yy + 66);
+    });
+    yy += 100;
+
+    // ---------- HISTÓRICO DE VISITAS ----------
+    const visits = db.prepare(`SELECT * FROM visits_schedule WHERE condo_id=? AND date >= ? ORDER BY date DESC LIMIT 10`)
+      .all(cid, new Date(Date.now() - 180*86400_000).toISOString().slice(0,10));
+    doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(...INK);
+    doc.text(`Visitas técnicas (${visits.length})`, 40, yy); yy += 20;
+    if (visits.length) {
+      doc.setFillColor(255,255,255); doc.roundedRect(40, yy, W - 80, Math.min(visits.length, 6) * 30 + 14, 10, 10, 'F');
+      visits.slice(0, 6).forEach((v, i) => {
+        const vy = yy + 18 + i * 30;
+        // Dot status
+        const stColor = v.status === 'done' ? GREEN : (v.status === 'cancelled' ? RED : ACCENT);
+        doc.setFillColor(...stColor); doc.circle(60, vy - 4, 4, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...INK);
+        doc.text(new Date(v.date).toLocaleDateString('pt-BR'), 72, vy);
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...GRAY_700);
+        doc.text(v.type || 'Manutenção', 140, vy);
+        doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(...GRAY_400);
+        doc.text((v.status || 'agendada').toUpperCase(), W - 60, vy, { align: 'right' });
+      });
+      yy += Math.min(visits.length, 6) * 30 + 30;
+    } else {
+      doc.setFont('helvetica','italic'); doc.setFontSize(10); doc.setTextColor(...GRAY_400);
+      doc.text('Nenhuma visita registrada nos últimos 180 dias.', 40, yy + 6); yy += 30;
+    }
+
+    // ---------- HISTÓRICO DE CHAMADOS ----------
+    if (yy > H - 200) { doc.addPage(); yy = 80; }
+    const tickets = db.prepare(`SELECT * FROM tickets WHERE condo_id=? AND created_at >= ? ORDER BY created_at DESC LIMIT 10`)
+      .all(cid, Date.now() - 180*86400_000);
+    doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(...INK);
+    doc.text(`Chamados (${tickets.length})`, 40, yy); yy += 20;
+    if (tickets.length) {
+      doc.setFillColor(255,255,255); doc.roundedRect(40, yy, W - 80, Math.min(tickets.length, 5) * 44 + 14, 10, 10, 'F');
+      tickets.slice(0, 5).forEach((t, i) => {
+        const ty = yy + 22 + i * 44;
+        // Priority indicator
+        const pColor = t.priority === 'urgente' ? RED : (t.priority === 'alta' ? ACCENT : BRAND_LIGHT);
+        doc.setFillColor(...pColor); doc.roundedRect(56, ty - 10, 4, 28, 2, 2, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...INK);
+        const title = (t.title || '—').slice(0, 60);
+        doc.text(title, 70, ty);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GRAY_700);
+        doc.text(`${new Date(t.created_at).toLocaleDateString('pt-BR')} · ${t.category||'geral'} · ${t.opened_by_name||'—'}`, 70, ty + 12);
+        // Status pill
+        const sColor = t.status === 'resolvido' || t.status === 'fechado' ? GREEN : (t.status === 'aberto' ? ACCENT : BRAND);
+        doc.setFillColor(...sColor);
+        doc.roundedRect(W - 100, ty - 10, 50, 18, 9, 9, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255);
+        doc.text((t.status || '—').toUpperCase().slice(0,8), W - 75, ty + 1, { align: 'center' });
+      });
+      yy += Math.min(tickets.length, 5) * 44 + 30;
+    } else {
+      doc.setFont('helvetica','italic'); doc.setFontSize(10); doc.setTextColor(...GRAY_400);
+      doc.text('Nenhum chamado registrado nos últimos 180 dias.', 40, yy + 6); yy += 30;
+    }
+
+    // ---------- CONTATO ----------
     yy += 10;
-    yy = sectionTitle('7. Validação', yy);
-    yy = paragraph('Este relatório foi gerado automaticamente pelo sistema Lavandery com base nos dados de utilização registrados nas máquinas do condomínio. Todos os valores foram calculados conforme contrato vigente entre as partes.', yy, { color: 80, italic: true });
+    if (yy > H - 140) { doc.addPage(); yy = 80; }
+    doc.setFillColor(...BRAND); doc.roundedRect(40, yy, W - 80, 100, 14, 14, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text('Dúvidas? Fale com a gente', 60, yy + 28);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.setTextColor(220, 215, 240);
+    doc.text('📧 financeiro@lavandery.com.br', 60, yy + 52);
+    doc.text('📱 (11) 99999-9999 — WhatsApp', 60, yy + 68);
+    doc.text('🌐 lavandery.com.br', 60, yy + 84);
+    // Badge tempo de resposta
+    doc.setFillColor(...ACCENT); doc.roundedRect(W - 190, yy + 34, 140, 32, 16, 16, 'F');
+    doc.setTextColor(...INK); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text('⚡ Resposta em 48h', W - 120, yy + 53, { align: 'center' });
 
     // ============== RODAPÉ EM TODAS AS PÁGINAS ==============
     const pageCount = doc.getNumberOfPages();
