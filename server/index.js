@@ -157,7 +157,7 @@ app.get('/api/condominiums/:id', (req,res) => {
 app.post('/api/condominiums/bulk-configure-from-sheet', async (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   try {
-    const { url, dry_run } = req.body || {};
+    const { url, dry_run, auto_create } = req.body || {};
     const sheetId = extractSheetId(url);
     if (!sheetId) return res.status(400).json({ error: 'invalid_url' });
     // Baixa workbook inteiro como xlsx
@@ -187,6 +187,13 @@ app.post('/api/condominiums/bulk-configure-from-sheet', async (req, res) => {
     const IGNORE = ['REPASSE TOTAL', 'RESUMO', 'DASHBOARD', 'TEMPLATE', 'MODELO'];
     const results = [];
     const upsert = db.prepare('UPDATE condominiums SET cycle_rate=COALESCE(?,cycle_rate), cycle_price=COALESCE(?,cycle_price), tax_rate=COALESCE(?,tax_rate) WHERE id=?');
+    const insertCondo = db.prepare(`INSERT INTO condominiums (id,name,cycle_rate,cycle_price,tax_rate,is_contract) VALUES (?,?,?,?,?,0)`);
+
+    function titleCase(s) {
+      return String(s||'').toLowerCase().split(/\s+/).filter(Boolean)
+        .map(w => /^(de|da|do|dos|das|e|em|na|no)$/i.test(w) ? w : w.charAt(0).toLocaleUpperCase('pt-BR') + w.slice(1))
+        .join(' ').replace(/^./, c => c.toLocaleUpperCase('pt-BR'));
+    }
 
     for (const tabName of wb.SheetNames) {
       const clean = tabName.trim();
@@ -195,10 +202,22 @@ app.post('/api/condominiums/bulk-configure-from-sheet', async (req, res) => {
       const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false });
       const cfg = detectCondoRates(rows);
       if (!cfg.cycle_rate) { results.push({ tab: clean, ok:false, reason:'no_rate_detected', ...cfg }); continue; }
-      const matched = matchCondo(clean);
+      let matched = matchCondo(clean);
+      let created = false;
+      if (!matched && auto_create && !dry_run) {
+        // Cria novo condo a partir do nome da aba
+        const name = titleCase(clean);
+        const id = 'c_sheet_' + norm(clean).slice(0,24);
+        try {
+          insertCondo.run(id, name, cfg.cycle_rate, cfg.cycle_price, cfg.tax_rate);
+          matched = { id, name };
+          created = true;
+          condos.push({ id, name });
+        } catch(e) { /* talvez já exista */ }
+      }
       if (!matched) { results.push({ tab: clean, ok:false, reason:'no_condo_match', ...cfg }); continue; }
-      if (!dry_run) upsert.run(cfg.cycle_rate, cfg.cycle_price, cfg.tax_rate, matched.id);
-      results.push({ tab: clean, ok:true, condo_id: matched.id, condo_name: matched.name, cycle_rate: cfg.cycle_rate, cycle_price: cfg.cycle_price, tax_rate: cfg.tax_rate, rate_mixed: cfg.rate_mixed });
+      if (!dry_run && !created) upsert.run(cfg.cycle_rate, cfg.cycle_price, cfg.tax_rate, matched.id);
+      results.push({ tab: clean, ok:true, created, condo_id: matched.id, condo_name: matched.name, cycle_rate: cfg.cycle_rate, cycle_price: cfg.cycle_price, tax_rate: cfg.tax_rate, rate_mixed: cfg.rate_mixed });
     }
 
     const okCount = results.filter(r => r.ok).length;

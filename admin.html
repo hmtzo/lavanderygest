@@ -2133,7 +2133,7 @@ async function rpMasterCall(dry) {
   if (!url) { Toast.warning('Cole o link da planilha'); return null; }
   const r = await fetch('/api/condominiums/bulk-configure-from-sheet', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ url, dry_run: dry })
+    body: JSON.stringify({ url, dry_run: dry, auto_create: true })
   });
   return { ok: r.ok, data: await r.json() };
 }
