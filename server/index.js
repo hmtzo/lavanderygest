@@ -2189,6 +2189,7 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     // Card principal do condomínio - glass effect
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(50, 330, W-100, 140, 16, 16, 'F');
+
     // Linha colorida lateral
     doc.setFillColor(...ACCENT);
     doc.roundedRect(50, 330, 5, 140, 2, 2, 'F');
@@ -2204,7 +2205,7 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     if (condo.cnpj) { doc.text(`🏢 CNPJ: ${condo.cnpj}`, 72, infoY); infoY += 14; }
 
     // HERO NUMBER — valor final gigante
-    doc.setFillColor(255, 255, 255, 'F');
+    doc.setFillColor(255, 255, 255);
     doc.roundedRect(50, 500, W-100, 200, 16, 16, 'F');
     // Accent gold bar
     doc.setFillColor(...ACCENT); doc.roundedRect(50, 500, W-100, 6, 2, 2, 'F');
@@ -2342,37 +2343,37 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...INK);
     doc.text('DIVISÃO DO VALOR BRUTO', 56, yy + 24);
 
-    // Desenha donut com 2 arcos
+    // Desenha donut com 2 anéis simples (compatível com jsPDF)
     const cx = 130, cy = yy + 115, radius = 60, thickness = 18;
-    const total = (r.repasse_bruto||1);
-    const condoPct = (r.repasse_liquido||0) / total;
-    const taxPct = (r.imposto||0) / total;
+    const total = Math.max(0.01, (r.repasse_bruto||0));
+    const condoPct = Math.max(0, Math.min(1, (r.repasse_liquido||0) / total));
 
-    // Background circle
+    // Background circle (cinza claro) — representa o "todo"
     doc.setFillColor(...GRAY_100);
     doc.circle(cx, cy, radius, 'F');
-    doc.setFillColor(255,255,255);
-    doc.circle(cx, cy, radius - thickness, 'F');
-
-    // Condo slice (green) — desenhado com arcos
-    function drawArc(cx, cy, radius, thickness, startPct, endPct, color) {
-      const steps = Math.max(20, Math.floor((endPct - startPct) * 60));
-      doc.setFillColor(...color);
+    // Setor verde (% condomínio) — aproximação: semi-círculo ou círculo colorido proporcional à base
+    doc.setFillColor(...GREEN);
+    // Desenha como círculo completo mas será parcialmente sobreposto pelo vermelho se precisar
+    doc.circle(cx, cy, radius, 'F');
+    // Setor vermelho (imposto) — setor angular usando triangulação
+    const taxAngle = (1 - condoPct) * 360;
+    if (taxAngle > 0 && taxAngle < 360) {
+      doc.setFillColor(...RED);
+      const steps = Math.max(10, Math.floor(taxAngle / 3));
       for (let i = 0; i < steps; i++) {
-        const p1 = startPct + (i/steps) * (endPct - startPct);
-        const p2 = startPct + ((i+1)/steps) * (endPct - startPct);
-        const a1 = (p1 * 360 - 90) * Math.PI / 180;
-        const a2 = (p2 * 360 - 90) * Math.PI / 180;
-        const r1 = radius, r2 = radius - thickness;
-        const x1 = cx + Math.cos(a1) * r1, y1 = cy + Math.sin(a1) * r1;
-        const x2 = cx + Math.cos(a2) * r1, y2 = cy + Math.sin(a2) * r1;
-        const x3 = cx + Math.cos(a2) * r2, y3 = cy + Math.sin(a2) * r2;
-        const x4 = cx + Math.cos(a1) * r2, y4 = cy + Math.sin(a1) * r2;
-        doc.lines([[x2-x1,y2-y1],[x3-x2,y3-y2],[x4-x3,y4-y3],[x1-x4,y1-y4]], x1, y1, [1,1], 'F');
+        const ang1 = ((i/steps) * taxAngle - 90) * Math.PI / 180;
+        const ang2 = (((i+1)/steps) * taxAngle - 90) * Math.PI / 180;
+        doc.triangle(
+          cx, cy,
+          cx + Math.cos(ang1) * radius, cy + Math.sin(ang1) * radius,
+          cx + Math.cos(ang2) * radius, cy + Math.sin(ang2) * radius,
+          'F'
+        );
       }
     }
-    drawArc(cx, cy, radius, thickness, 0, condoPct, GREEN);
-    drawArc(cx, cy, radius, thickness, condoPct, 1, RED);
+    // Buraco do meio (branco)
+    doc.setFillColor(255, 255, 255);
+    doc.circle(cx, cy, radius - thickness, 'F');
 
     // Label no centro
     doc.setTextColor(...INK); doc.setFont('helvetica','bold'); doc.setFontSize(16);
