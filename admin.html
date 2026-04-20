@@ -473,8 +473,7 @@
       <input id="rpPageSearch" class="input" placeholder="🔎 Buscar condomínio..." style="width:240px;height:36px"/>
     </div>
     <div id="rpPageTotals" style="display:flex;gap:16px;padding:10px 14px;background:var(--ink-50);border-radius:10px;font-size:13px;margin-bottom:10px">
-      <div><span class="subtle">Total repasse líquido:</span> <b id="rpPageTotalRepasse" style="color:var(--brand-700)">R$ 0,00</b></div>
-      <div><span class="subtle">Total Lavandery:</span> <b id="rpPageTotalLav" style="color:#10b981">R$ 0,00</b></div>
+      <div><span class="subtle">Total a repassar:</span> <b id="rpPageTotalRepasse" style="color:var(--brand-700)">R$ 0,00</b></div>
       <div style="margin-left:auto"><span class="subtle" id="rpPageConfigured">0/0 lançados</span></div>
     </div>
     <div id="rpPageList" style="max-height:620px;overflow-y:auto"></div>
@@ -2165,39 +2164,39 @@ function _moneyRp(n) { return 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFra
 function renderRpPage(filter='') {
   const host = document.querySelector('#rpPageList');
   const f = (filter||'').toLowerCase();
-  const list = _rpPageCondos.filter(c => !f || (c.name||'').toLowerCase().includes(f));
+  // Display usa o nome do CONTRATANTE do contrato quando houver
+  const displayName = c => c.contract_name || c.name;
+  const list = _rpPageCondos.filter(c => !f || displayName(c).toLowerCase().includes(f));
   host.innerHTML = `
-    <div style="display:grid;grid-template-columns:1.8fr 70px 70px 100px 90px 80px 90px 110px 130px;gap:6px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ink-200);position:sticky;top:0;background:#fff;z-index:1">
-      <div>Condomínio</div>
-      <div>Lav</div><div>Sec</div>
-      <div>Tipo</div><div>Valor</div><div>Imp%</div><div>R$/máq</div>
-      <div>Rep. líq.</div><div style="text-align:right">Líq. Lav.</div>
+    <div style="display:grid;grid-template-columns:2fr 70px 70px 100px 80px 100px 70px 140px;gap:6px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ink-200);position:sticky;top:0;background:#fff;z-index:1">
+      <div>Condomínio (contrato)</div>
+      <div>Lavagens</div><div>Secagens</div>
+      <div>Valor ciclo</div><div>Tipo</div><div>Valor repasse</div><div>Imposto %</div>
+      <div style="text-align:right">Repasse FINAL</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr;gap:3px;margin-top:4px">
       ${list.map(c => {
         const r = _rpPageRepasses[c.id] || {};
-        const type = r.type || 'fixed';
+        const type = r.type || 'percent';
         const val = r.value != null ? r.value : (c.cycle_rate || '');
-        const tax = r.tax_pct != null ? r.tax_pct : (c.tax_rate || '');
+        const tax = r.tax_pct != null ? r.tax_pct : (c.tax_rate || 32.25);
         const price = r.price != null ? r.price : (c.cycle_price || '');
         return `
-        <div class="rpp-row" data-id="${c.id}" style="display:grid;grid-template-columns:1.8fr 70px 70px 100px 90px 80px 90px 110px 130px;gap:6px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.5);border-radius:6px">
-          <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.name)}">${esc(c.name)}</div>
+        <div class="rpp-row" data-id="${c.id}" style="display:grid;grid-template-columns:2fr 70px 70px 100px 80px 100px 70px 140px;gap:6px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.5);border-radius:6px">
+          <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(displayName(c))}">${esc(displayName(c))}</div>
           <input class="input rpp-w" type="number" min="0" placeholder="0" value="${r.washes||''}" style="height:30px;font-size:12px;padding:0 6px"/>
           <input class="input rpp-d" type="number" min="0" placeholder="0" value="${r.dries||''}" style="height:30px;font-size:12px;padding:0 6px"/>
+          <input class="input rpp-price" type="number" step="0.01" min="0" placeholder="R$" value="${price}" style="height:30px;font-size:12px;padding:0 6px"/>
           <select class="select rpp-t" style="height:30px;font-size:11px;padding:0 4px">
-            <option value="fixed" ${type==='fixed'?'selected':''}>R$/ciclo</option>
+            <option value="fixed" ${type==='fixed'?'selected':''}>R$</option>
             <option value="percent" ${type==='percent'?'selected':''}>%</option>
           </select>
           <input class="input rpp-v" type="number" step="0.01" min="0" placeholder="0" value="${val}" style="height:30px;font-size:12px;padding:0 6px"/>
-          <input class="input rpp-tax" type="number" step="0.01" min="0" placeholder="0" value="${tax}" style="height:30px;font-size:12px;padding:0 6px"/>
-          <input class="input rpp-price" type="number" step="0.01" min="0" placeholder="—" value="${price}" style="height:30px;font-size:12px;padding:0 6px"/>
-          <div class="rpp-liq" style="font-size:13px;font-weight:600;color:var(--brand-700)">${_moneyRp(r.repasse_liquido)}</div>
-          <div class="rpp-lav" style="font-size:13px;font-weight:600;color:#10b981;text-align:right">${r.liquido_lavandery!=null?_moneyRp(r.liquido_lavandery):'—'}</div>
+          <input class="input rpp-tax" type="number" step="0.01" min="0" placeholder="32.25" value="${tax}" style="height:30px;font-size:12px;padding:0 6px"/>
+          <div class="rpp-liq" style="font-size:14px;font-weight:700;color:var(--brand-700);text-align:right">${_moneyRp(r.repasse_liquido)}</div>
         </div>`;
       }).join('')}
     </div>`;
-  // Bind
   host.querySelectorAll('.rpp-row').forEach(row => {
     const get = s => row.querySelector(s);
     const recalc = () => {
@@ -2207,11 +2206,10 @@ function renderRpPage(filter='') {
       const val = +get('.rpp-v').value||0;
       const tax = (+get('.rpp-tax').value||0)/100;
       const price = +get('.rpp-price').value||0;
+      // Bruto: R$/ciclo × ciclos OU % × (ciclos × valor_ciclo)
       const bruto = type==='fixed' ? cycles*val : cycles*price*(val/100);
       const liq = bruto*(1-tax);
-      const lav = price>0 ? cycles*price - bruto : null;
       get('.rpp-liq').textContent = _moneyRp(liq);
-      get('.rpp-lav').textContent = lav!=null ? _moneyRp(lav) : '—';
       updateRpTotals();
     };
     row.querySelectorAll('input,select').forEach(el => el.addEventListener('input', recalc));
@@ -2220,7 +2218,7 @@ function renderRpPage(filter='') {
 }
 
 function updateRpTotals() {
-  let totRep = 0, totLav = 0, withData = 0;
+  let totRep = 0, withData = 0;
   document.querySelectorAll('.rpp-row').forEach(row => {
     const w = +row.querySelector('.rpp-w').value||0;
     const d = +row.querySelector('.rpp-d').value||0;
@@ -2233,11 +2231,9 @@ function updateRpTotals() {
       const price = +row.querySelector('.rpp-price').value||0;
       const bruto = type==='fixed' ? cycles*val : cycles*price*(val/100);
       totRep += bruto*(1-tax);
-      if (price>0) totLav += cycles*price - bruto;
     }
   });
   document.querySelector('#rpPageTotalRepasse').textContent = _moneyRp(totRep);
-  document.querySelector('#rpPageTotalLav').textContent = _moneyRp(totLav);
   document.querySelector('#rpPageConfigured').textContent = `${withData}/${_rpPageCondos.length} lançados`;
 }
 

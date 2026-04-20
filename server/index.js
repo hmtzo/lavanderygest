@@ -117,7 +117,20 @@ app.delete('/api/technicians/:id', (req,res) => {
 app.get('/api/condominiums', (_,res) => {
   const condos = db.prepare('SELECT * FROM condominiums').all();
   const machines = db.prepare('SELECT * FROM machines').all();
-  res.json(condos.map(c => ({ ...c, machines: machines.filter(m=>m.condo_id===c.id) })));
+  // Busca nome oficial do CONTRATANTE do contrato (se veio do Autentique)
+  const cache = db.prepare('SELECT document_id, extracted FROM contract_cache').all();
+  const contractNames = {};
+  for (const r of cache) {
+    try {
+      const ex = JSON.parse(r.extracted || 'null');
+      if (ex?.name) contractNames[r.document_id] = ex.name;
+    } catch {}
+  }
+  res.json(condos.map(c => ({
+    ...c,
+    contract_name: c.autentique_doc_id ? (contractNames[c.autentique_doc_id] || null) : null,
+    machines: machines.filter(m => m.condo_id === c.id),
+  })));
 });
 
 // Condomínios CRUD
