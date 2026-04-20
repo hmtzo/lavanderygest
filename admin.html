@@ -3213,7 +3213,7 @@ document.querySelector('#calTodayBtn')?.addEventListener('click', () => { _calCu
 document.querySelector('#calRefreshBtn')?.addEventListener('click', loadCalendar);
 
 // ---------- Entrega de Equipamentos ----------
-const ED_UNIT = 53000;
+const ED_UNIT = 52000;
 const BRL = (v) => 'R$ ' + (v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function maskCpf(v){ return (v||'').replace(/\D/g,'').slice(0,11).replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2'); }
 function maskPhone(v){ const d=(v||'').replace(/\D/g,'').slice(0,11); if(d.length<=10) return d.replace(/(\d{2})(\d{4})(\d{0,4})/,'($1) $2-$3'); return d.replace(/(\d{2})(\d{5})(\d{0,4})/,'($1) $2-$3'); }

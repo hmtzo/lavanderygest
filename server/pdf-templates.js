@@ -184,117 +184,188 @@ export function generateEquipmentDeliveryTerm(d) {
   const doc = new jsPDF({ unit:'pt', format:'a4' });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
-  header(doc, 'Termo de entrega de equipamentos');
+  const margin = 50;
+  const contentW = W - 2*margin;
 
-  let y = 130;
-
-  // Contratada (fixa)
-  y = section(doc, 'CONTRATADA', y);
-  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...INK);
-  doc.text('LAVANDERY', 40, y+12);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...MUTED);
-  doc.text('(INOVA TECNOLOGIA E SERVIÇOS E REPRESENTAÇÃO LTDA.)', 40, y+28);
-  doc.text('CNPJ: 45.061.358/0001-62', 40, y+42);
-  y += 60;
-
-  // Contratante
-  y = section(doc, 'CONTRATANTE', y);
-  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...INK);
-  doc.text(d.condo_name || '—', 40, y+12);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...MUTED);
-  if (d.condo_cnpj) doc.text('CNPJ: ' + d.condo_cnpj, 40, y+26);
-  if (d.condo_address) {
-    const addr = doc.splitTextToSize('Endereço: ' + d.condo_address, W-80);
-    doc.text(addr, 40, y+40);
-    y += 40 + addr.length*12;
-  } else { y += 40; }
-
-  // Responsável
-  y = section(doc, 'RESPONSÁVEL PELO RECEBIMENTO', y);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
-  doc.text(`Nome: ${d.responsible_name||'—'}`, 40, y+12);
-  doc.text(`CPF: ${d.responsible_cpf||'—'}`, 40, y+26);
-  doc.text(`Telefone: ${d.responsible_phone||'—'}`, 40, y+40);
-  y += 56;
-
-  // Dados da entrega
-  y = section(doc, 'DADOS DA ENTREGA', y);
-  doc.text(`Data: ${d.delivery_date ? new Date(d.delivery_date).toLocaleDateString('pt-BR') : '—'}`, 40, y+12);
-  doc.text(`Hora: ${d.delivery_time || '—'}`, 200, y+12);
-  doc.text(`Local da instalação: ${d.delivery_location || '—'}`, 40, y+28);
-  y += 46;
-
-  // Equipamentos
-  y = section(doc, 'EQUIPAMENTOS ENTREGUES', y);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
-  const brand = d.equipment_brand || 'Speed Queen';
-  doc.text(`Marca: ${brand}`, 40, y+12);
-  doc.text(`Definição do conjunto: 1 lavadora + 1 secadora`, 40, y+26);
-  doc.setFont('helvetica','bold');
-  doc.text(`Quantidade de conjuntos: ${d.conjuntos_qty||0}`, 40, y+44);
-  doc.setFont('helvetica','normal');
-  doc.text(`Valor unitário por conjunto: R$ ${(d.unit_value||53000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}`, 40, y+58);
-  doc.setFont('helvetica','bold'); doc.setTextColor(...BRAND);
-  doc.text(`Valor total: R$ ${(d.total_value||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}`, 40, y+74);
-  doc.setTextColor(...INK);
-  y += 94;
-
-  // Condição
-  y = section(doc, 'CONDIÇÃO DOS EQUIPAMENTOS', y);
+  // Cabeçalho Lavandery (barra roxa com logo)
+  doc.setFillColor(...BRAND); doc.rect(0, 0, W, 70, 'F');
+  doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(20);
+  doc.text('LAVANDERY', margin, 40);
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
-  const conds = [
-    ['Novos', !!d.condition_new],
-    ['Sem avarias aparentes', !!d.condition_no_damage],
-    ['Testados', !!d.condition_tested],
-  ];
-  conds.forEach(([label, checked], i) => {
-    checkbox(doc, 50, y+12+i*18, checked);
-    doc.text(label, 68, y+12+i*18);
+  doc.text('Inova Tecnologia e Serviços e Representação Ltda.', margin, 56);
+
+  // Título centralizado
+  let y = 110;
+  doc.setTextColor(...INK);
+  doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('TERMO DE ENTREGA DE CONJUNTOS DE MÁQUINAS', W/2, y, { align:'center' });
+  y += 20;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(...MUTED);
+  doc.text('Lavanderia Compartilhada — Regime de Comodato', W/2, y, { align:'center' });
+  y += 24;
+
+  // Linha divisória
+  doc.setDrawColor(...LIGHT); doc.setLineWidth(1);
+  doc.line(margin, y, W-margin, y);
+  y += 20;
+
+  // Bloco CONTRATADA
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...BRAND);
+  doc.text('CONTRATADA', margin, y); y += 16;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
+  const contratadaText = 'INOVA TECNOLOGIA E SERVIÇOS E REPRESENTAÇÃO LTDA, inscrita no CNPJ sob nº 45.061.358/0001-62, com sede na Rua Califórnia, 40 — Santana de Parnaíba/SP, doravante denominada LAVANDERY, neste ato representada por seu sócio Heitor Henrique Alves Pereira.';
+  const cLines = doc.splitTextToSize(contratadaText, contentW);
+  doc.text(cLines, margin, y);
+  y += cLines.length * 14 + 18;
+
+  // Linha divisória
+  doc.setDrawColor(...LIGHT); doc.line(margin, y, W-margin, y); y += 16;
+
+  // Bloco CONTRATANTE
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...BRAND);
+  doc.text('CONTRATANTE', margin, y); y += 16;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
+  const condoName = (d.condo_name || '—').toUpperCase();
+  const cnpjStr = d.condo_cnpj ? `${condoName}, inscrito no CNPJ sob nº ${d.condo_cnpj}, neste ato representado por seu síndico(a) ou representante legal, conforme contrato firmado entre as partes.` : `${condoName}, neste ato representado por seu síndico(a) ou representante legal, conforme contrato firmado entre as partes.`;
+  const ctLines = doc.splitTextToSize(cnpjStr, contentW);
+  doc.text(ctLines, margin, y);
+  y += ctLines.length * 14 + 20;
+
+  // Seção 1 — OBJETO
+  y = sectionNum(doc, '1.', 'OBJETO', y, margin);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
+  const obj = 'O presente Termo formaliza a entrega, instalação e disponibilização para uso de equipamentos de lavanderia compartilhada fornecidos pela CONTRATADA em regime de comodato.';
+  const objLines = doc.splitTextToSize(obj, contentW);
+  doc.text(objLines, margin, y);
+  y += objLines.length * 14 + 14;
+
+  // Seção 2 — EQUIPAMENTOS ENTREGUES
+  y = sectionNum(doc, '2.', 'EQUIPAMENTOS ENTREGUES', y, margin);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
+  doc.text('Foram entregues e devidamente instalados:', margin, y); y += 16;
+  const qty = d.conjuntos_qty || 0;
+  const qtyExt = numberToPortuguese(qty);
+  const brand = (d.equipment_brand || 'SPEED QUEEN').toUpperCase();
+  const bulletX = margin + 14;
+  [
+    `${String(qty).padStart(2,'0')} (${qtyExt}) conjuntos de máquinas de lavar e secar roupas`,
+    `Marca: ${brand}`,
+    `Estado: ${d.condition_new ? 'Novos' : 'Em bom estado'}`,
+    `Propriedade: LAVANDERY`,
+  ].forEach(line => {
+    doc.text('•', bulletX, y);
+    doc.text(line, bulletX + 12, y);
+    y += 14;
   });
-  y += 72;
+  y += 10;
 
-  if (d.notes) {
-    y = section(doc, 'OBSERVAÇÕES', y);
-    const split = doc.splitTextToSize(d.notes, W-80);
-    doc.text(split, 40, y+10);
-    y += 10 + split.length*12 + 10;
-  }
-
-  // Quebra página se não couber declaração + assinatura
-  if (y > H - 260) { footer(doc, d.id.slice(-8).toUpperCase(), 1); doc.addPage(); y = 60; }
-
-  // Declaração
-  y = section(doc, 'DECLARAÇÃO', y);
+  // Seção 3 — VALOR PATRIMONIAL
+  y = sectionNum(doc, '3.', 'VALOR PATRIMONIAL', y, margin);
   doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
-  const decl = '"O CONDOMÍNIO / CONTRATANTE declara, para os devidos fins, que recebeu nesta data os equipamentos acima descritos em perfeito estado de conservação e funcionamento, comprometendo-se com sua guarda, zelo e uso adequado, ficando ciente de que os bens permanecem de propriedade da LAVANDERY (INOVA TECNOLOGIA E SERVIÇOS E REPRESENTAÇÃO LTDA.)."';
-  const declLines = doc.splitTextToSize(decl, W-80);
-  doc.text(declLines, 40, y+10);
-  y += 10 + declLines.length*12 + 20;
+  const unitValue = d.unit_value || 52000;
+  const totalValue = d.total_value || (unitValue * qty);
+  const fmt = n => 'R$ ' + (+n||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  doc.text('•', bulletX, y); doc.text(`Valor unitário por conjunto: ${fmt(unitValue)}`, bulletX + 12, y); y += 14;
+  doc.setFont('helvetica','bold');
+  doc.text('•', bulletX, y); doc.text(`Valor total dos ${String(qty).padStart(2,'0')} conjuntos: ${fmt(totalValue)}`, bulletX + 12, y); y += 18;
+  doc.setFont('helvetica','normal'); doc.setTextColor(...MUTED);
+  const note = 'Os valores acima possuem natureza exclusivamente patrimonial, para fins de responsabilidade civil, indenização por dano, furto ou sinistro, não caracterizando venda ou transferência de propriedade.';
+  const nLines = doc.splitTextToSize(note, contentW);
+  doc.text(nLines, margin, y);
+  y += nLines.length * 13 + 14;
 
-  // Assinatura
-  y = section(doc, 'ASSINATURA DO RESPONSÁVEL', y);
-  const sigW = 260, sigH = 80;
-  const sigX = (W-sigW)/2;
-  doc.setDrawColor(...MUTED); doc.setLineWidth(0.5);
-  doc.roundedRect(sigX, y+10, sigW, sigH, 6, 6);
-  if (d.signature_data_url) {
-    try { doc.addImage(d.signature_data_url, 'PNG', sigX+4, y+14, sigW-8, sigH-8); } catch {}
-  }
-  // linha abaixo
-  doc.line(sigX, y+10+sigH+12, sigX+sigW, y+10+sigH+12);
+  // Verifica se precisa quebrar página
+  if (y > H - 320) { doc.addPage(); y = 50; }
+
+  // Seção 4 — DECLARAÇÃO DE INSTALAÇÃO
+  y = sectionNum(doc, '4.', 'DECLARAÇÃO DE INSTALAÇÃO', y, margin);
   doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
-  doc.text(d.responsible_name || '—', W/2, y+10+sigH+26, { align:'center' });
-  doc.setFontSize(8); doc.setTextColor(...MUTED);
-  doc.text('Responsável pelo recebimento', W/2, y+10+sigH+38, { align:'center' });
+  doc.text('A CONTRATADA declara que:', margin, y); y += 16;
+  [
+    'Os equipamentos foram devidamente instalados;',
+    'Foram realizados testes operacionais;',
+    'As máquinas encontram-se em pleno funcionamento;',
+    'Estão aptas para operação conforme especificação técnica.',
+  ].forEach(line => { doc.text('•', bulletX, y); doc.text(line, bulletX + 12, y); y += 14; });
+  y += 10;
 
-  // Rodapé customizado (substitui o footer padrão)
-  const finalizedAt = d.finalized_at || Date.now();
-  doc.setDrawColor(230,228,240); doc.setLineWidth(0.5);
-  doc.line(40, H-48, W-40, H-48);
+  // Seção 5 — RESPONSABILIDADE
+  y = sectionNum(doc, '5.', 'RESPONSABILIDADE', y, margin);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
+  const resp = 'Os equipamentos permanecem de propriedade exclusiva da LAVANDERY durante todo o período contratual, cabendo ao CONDOMÍNIO zelar pela integridade física dos equipamentos instalados em suas dependências.';
+  const rLines = doc.splitTextToSize(resp, contentW);
+  doc.text(rLines, margin, y);
+  y += rLines.length * 14 + 14;
+
+  // Seção 6 — DECLARAÇÃO DE RECEBIMENTO
+  y = sectionNum(doc, '6.', 'DECLARAÇÃO DE RECEBIMENTO', y, margin);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
+  const decl = 'O CONDOMÍNIO declara que recebeu os equipamentos acima descritos em perfeito estado de funcionamento, nada tendo a reclamar quanto à instalação e operacionalidade inicial.';
+  const dLines = doc.splitTextToSize(decl, contentW);
+  doc.text(dLines, margin, y);
+  y += dLines.length * 14 + 18;
+
+  // Local e data
+  if (y > H - 220) { doc.addPage(); y = 50; }
+  const deliveryDate = d.delivery_date ? new Date(d.delivery_date) : new Date();
+  const dia = String(deliveryDate.getDate()).padStart(2,'0');
+  const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const mes = meses[deliveryDate.getMonth()];
+  const ano = deliveryDate.getFullYear();
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(...INK);
+  doc.text(`São Paulo, ${dia} de ${mes} de ${ano}.`, W/2, y, { align:'center' });
+  y += 40;
+
+  // Assinaturas
+  const sigY = Math.max(y, H - 180);
+  const sigW = 220;
+
+  // CONTRATADA (esquerda)
+  const leftX = margin + 30;
+  doc.setDrawColor(...INK); doc.setLineWidth(0.8);
+  doc.line(leftX, sigY + 60, leftX + sigW, sigY + 60);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...INK);
+  doc.text('CONTRATADA', leftX + sigW/2, sigY + 76, { align:'center' });
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...MUTED);
-  doc.text(`Documento gerado automaticamente pelo sistema Lavandery.`, 40, H-32);
-  doc.text(`Entrega ${d.id.slice(-8).toUpperCase()} · Data de geração: ${new Date(finalizedAt).toLocaleString('pt-BR')}`, 40, H-18);
+  doc.text('INOVA TECNOLOGIA E SERVIÇOS', leftX + sigW/2, sigY + 90, { align:'center' });
+  doc.text('E REPRESENTAÇÃO LTDA', leftX + sigW/2, sigY + 102, { align:'center' });
+
+  // CONTRATANTE (direita)
+  const rightX = W - margin - sigW - 30;
+  doc.setDrawColor(...INK);
+  doc.line(rightX, sigY + 60, rightX + sigW, sigY + 60);
+  if (d.signature_data_url) {
+    try { doc.addImage(d.signature_data_url, 'PNG', rightX + 10, sigY, sigW - 20, 60); } catch {}
+  }
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...INK);
+  doc.text('CONTRATANTE', rightX + sigW/2, sigY + 76, { align:'center' });
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...MUTED);
+  const condoSigName = doc.splitTextToSize(condoName, sigW - 20);
+  doc.text(condoSigName, rightX + sigW/2, sigY + 90, { align:'center' });
+  if (d.responsible_name) {
+    doc.text(d.responsible_name, rightX + sigW/2, sigY + 90 + condoSigName.length*10, { align:'center' });
+  }
+
+  // Rodapé
+  doc.setDrawColor(...LIGHT); doc.setLineWidth(0.5);
+  doc.line(margin, H-40, W-margin, H-40);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...MUTED);
+  doc.text(`Documento gerado pelo sistema Lavandery · ID: ${(d.id||'').slice(-8).toUpperCase()}`, margin, H-26);
+  doc.text(new Date(d.finalized_at || Date.now()).toLocaleString('pt-BR'), W-margin, H-26, { align:'right' });
   return Buffer.from(doc.output('arraybuffer'));
+}
+
+// Helper: seção numerada
+function sectionNum(doc, num, title, y, margin) {
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...BRAND);
+  doc.text(`${num} ${title}`, margin, y);
+  return y + 18;
+}
+
+// Helper: número por extenso (1–20) pra português
+function numberToPortuguese(n) {
+  const map = ['zero','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','quatorze','quinze','dezesseis','dezessete','dezoito','dezenove','vinte'];
+  return map[n] || String(n);
 }
 
 // ---------- 3) Relatório de instalação ----------

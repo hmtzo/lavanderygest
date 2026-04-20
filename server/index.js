@@ -824,7 +824,7 @@ app.post('/api/implantations/:id/files', upload.single('file'), async (req, res)
 });
 
 // ---------- Módulo: Entrega de Equipamentos ----------
-const UNIT_VALUE_DEFAULT = 53000;
+const UNIT_VALUE_DEFAULT = 52000;
 
 function edHydrate(row) {
   if (!row) return null;
