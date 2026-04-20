@@ -221,6 +221,50 @@
 
   <section class="grid-cards stagger" id="kpis" style="margin-bottom:24px"></section>
 
+  <!-- Mapa de calor de chamados -->
+  <section class="card-new stagger" style="margin-bottom:16px;padding:0;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px 10px">
+      <div>
+        <div class="card-title" style="font-size:18px;font-weight:700">Mapa de calor de chamados</div>
+        <div class="subtle" style="font-size:12px;margin-top:2px">Volume por dia da semana × hora · últimos 90 dias</div>
+      </div>
+      <select id="hmRange" class="input" style="height:34px;font-size:12px;padding:0 10px;width:140px">
+        <option value="7">Últimos 7 dias</option>
+        <option value="30">Últimos 30 dias</option>
+        <option value="90" selected>Últimos 90 dias</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 200px;gap:20px;padding:10px 22px 16px">
+      <div id="heatmapGrid" style="min-height:240px"></div>
+      <div id="heatmapLegend" style="display:flex;flex-direction:column;justify-content:space-between;font-size:11px;color:var(--ink-500)">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between">
+          <span>Alto</span>
+          <div style="flex:1;margin:6px 0;background:linear-gradient(to bottom, #E84045, #F8A340, #FFD440, #F4F0FA);border-radius:4px;min-height:100px;width:20px;align-self:center"></div>
+          <span>Baixo</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px 22px;border-top:1px solid var(--ink-100)">
+      <div>
+        <div class="subtle" style="font-size:12px">Chamados críticos</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <span id="hmCritical" style="font-size:28px;font-weight:700;color:var(--ink-900)">0</span>
+          <span id="hmCriticalPill" class="pill" style="font-size:11px">—</span>
+        </div>
+        <div class="subtle" style="font-size:11px;margin-top:2px" id="hmCriticalSub">—</div>
+      </div>
+      <div>
+        <div class="subtle" style="font-size:12px">Total de chamados</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <span id="hmTotal" style="font-size:28px;font-weight:700;color:var(--ink-900)">0</span>
+          <span id="hmTotalPill" class="pill" style="font-size:11px">—</span>
+        </div>
+        <div class="subtle" style="font-size:11px;margin-top:2px" id="hmTotalSub">—</div>
+      </div>
+    </div>
+    <div id="hmMetrics" style="display:flex;flex-direction:column;border-top:1px solid var(--ink-100)"></div>
+  </section>
+
   <section class="stagger" style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
     <div class="card-new">
       <div class="card-header">
@@ -992,6 +1036,7 @@ async function load() {
   document.querySelector('#visitsTotal').textContent = `${d.visits.year} visitas agendadas`;
 
   renderKPIs(d);
+  loadHeatmap();
   renderVisitsChart(d);
   renderTechChart(d);
   renderSuppliesChart(d);
@@ -1000,6 +1045,105 @@ async function load() {
   renderNextVisits();
   renderActivity(d);
 }
+
+// ---------- Mapa de calor de chamados (dia × hora) ----------
+async function loadHeatmap() {
+  try {
+    const days = parseInt(document.querySelector('#hmRange')?.value || '90');
+    const since = Date.now() - days * 86400_000;
+    const tickets = await fetch('/api/tickets').then(r => r.ok ? r.json() : []).catch(() => []);
+    const recent = tickets.filter(t => t.created_at >= since);
+    // Grid 7×24 (dia: 0=dom..6=sáb, hora 0..23)
+    const grid = Array.from({length: 7}, () => Array(24).fill(0));
+    const critical = { curr: 0, prev: 0 };
+    const total = { curr: 0, prev: 0 };
+    const prevSince = since - days * 86400_000;
+    const respTimes = [], resolTimes = [];
+    let escalated = 0, resolved = 0;
+    for (const t of tickets) {
+      const ts = t.created_at || 0;
+      if (ts < prevSince) continue;
+      const d = new Date(ts);
+      if (ts >= since) {
+        grid[d.getDay()][d.getHours()]++;
+        total.curr++;
+        if (t.priority === 'urgente' || t.priority === 'alta') critical.curr++;
+        if (t.updated_at && t.updated_at !== t.created_at) respTimes.push(t.updated_at - t.created_at);
+        if (t.status === 'resolvido' || t.status === 'fechado') {
+          resolved++;
+          if (t.updated_at) resolTimes.push(t.updated_at - t.created_at);
+        }
+        if (t.status === 'escalado' || t.category === 'escalonamento') escalated++;
+      } else {
+        total.prev++;
+        if (t.priority === 'urgente' || t.priority === 'alta') critical.prev++;
+      }
+    }
+    const max = Math.max(1, ...grid.flat());
+    const dayLabels = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    // Cores: de var(--ink-50) → #FFD440 → #F8A340 → #E84045
+    const colorFor = v => {
+      if (!v) return 'rgba(123,95,199,.04)';
+      const pct = v / max;
+      if (pct < 0.25) return `rgba(255,212,64,${0.35 + pct*2})`;
+      if (pct < 0.6) return `rgba(248,163,64,${0.55 + pct*.7})`;
+      return `rgba(232,64,69,${0.75 + pct*.3})`;
+    };
+    const hostGrid = document.querySelector('#heatmapGrid');
+    if (!hostGrid) return;
+    let html = `<div style="display:grid;grid-template-columns:36px repeat(24,1fr);gap:3px">
+      <div></div>`;
+    for (let h = 0; h < 24; h++) html += `<div style="font-size:9px;color:var(--ink-400);text-align:center">${h%3===0?String(h).padStart(2,'0'):''}</div>`;
+    for (let d = 0; d < 7; d++) {
+      html += `<div style="font-size:11px;color:var(--ink-500);font-weight:500;display:flex;align-items:center">${dayLabels[d]}</div>`;
+      for (let h = 0; h < 24; h++) {
+        const v = grid[d][h];
+        html += `<div title="${dayLabels[d]} ${String(h).padStart(2,'0')}:00 — ${v} chamado${v!==1?'s':''}" style="aspect-ratio:1;background:${colorFor(v)};border-radius:3px;cursor:default;transition:transform .15s" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform=''"></div>`;
+      }
+    }
+    html += '</div>';
+    hostGrid.innerHTML = html;
+
+    // KPIs
+    const pctCrit = critical.prev ? Math.round((critical.curr - critical.prev) / critical.prev * 100) : 0;
+    const pctTot = total.prev ? Math.round((total.curr - total.prev) / total.prev * 100) : 0;
+    document.querySelector('#hmCritical').textContent = critical.curr;
+    document.querySelector('#hmTotal').textContent = total.curr;
+    const crP = document.querySelector('#hmCriticalPill');
+    crP.textContent = (pctCrit >= 0 ? '↑ ' : '↓ ') + Math.abs(pctCrit) + '%';
+    crP.className = 'pill ' + (pctCrit > 0 ? 'danger' : 'success');
+    const toP = document.querySelector('#hmTotalPill');
+    toP.textContent = (pctTot >= 0 ? '↑ ' : '↓ ') + Math.abs(pctTot) + '%';
+    toP.className = 'pill ' + (pctTot > 0 ? 'danger' : 'success');
+    document.querySelector('#hmCriticalSub').textContent = `Comparado a ${critical.prev} no período anterior`;
+    document.querySelector('#hmTotalSub').textContent = `Comparado a ${total.prev} no período anterior`;
+
+    // Métricas
+    const avgMs = arr => arr.length ? arr.reduce((s,x)=>s+x,0)/arr.length : 0;
+    const fmtH = ms => { const h = Math.round(ms/3600000); return h < 1 ? '<1h' : h + 'h'; };
+    const mttr = avgMs(respTimes);
+    const resolAvg = avgMs(resolTimes);
+    const escRate = total.curr ? Math.round(escalated/total.curr*100) : 0;
+    const metrics = [
+      { label: 'Tempo médio de resposta', value: fmtH(mttr), dir: mttr > 14400000 ? 'up' : 'down', color: mttr > 14400000 ? '#E84045' : '#40E5D1', icon: '⏱' },
+      { label: 'Tempo médio de resolução', value: fmtH(resolAvg), dir: resolAvg > 86400000 ? 'up' : 'down', color: resolAvg > 86400000 ? '#E84045' : '#40E5D1', icon: '✓' },
+      { label: 'Taxa de escalonamento', value: escRate + '%', dir: escRate > 10 ? 'up' : 'down', color: escRate > 10 ? '#E84045' : '#40E5D1', icon: '⚠' },
+    ];
+    document.querySelector('#hmMetrics').innerHTML = metrics.map(m => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 22px;border-top:1px solid var(--ink-100)">
+        <div style="display:flex;align-items:center;gap:10px;color:var(--ink-600);font-size:13px">
+          <span style="font-size:16px;color:${m.color}">${m.icon}</span>
+          <span>${m.label}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px;font-weight:600;color:var(--ink-900)">${m.value}</span>
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:999px;background:${m.color}1F;color:${m.color};font-size:12px">${m.dir==='up'?'↑':'↓'}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) { console.warn('heatmap err', e); }
+}
+document.addEventListener('change', e => { if (e.target?.id === 'hmRange') loadHeatmap(); });
 
 function renderKPIs(d) {
   const items = [
