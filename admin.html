@@ -456,52 +456,43 @@
   </section>
 </main>
 
-<!-- PAINEL ANALÍTICO POR CONDOMÍNIO -->
+<!-- PAINEL ADMINISTRATIVO COMPLETO POR CONDOMÍNIO -->
 <main class="page hidden" id="condoPanelMain">
-  <div class="page-header">
-    <div class="page-title">
-      <button id="cpBack" class="btn-new ghost sm" style="margin-bottom:10px">← Voltar</button>
-      <h1 id="cpTitle">—</h1>
-      <p id="cpSubtitle">—</p>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+    <div>
+      <button id="cpBack" class="btn-new ghost sm" style="margin-bottom:8px">← Voltar</button>
+      <h1 id="cpTitle" style="margin:0;font-size:28px;font-weight:700;letter-spacing:-.02em">—</h1>
+      <p id="cpSubtitle" style="margin:4px 0 0;color:var(--ink-500);font-size:14px">—</p>
+      <div id="cpBadges" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <select id="cpYear" class="input" style="height:38px;width:110px"></select>
+      <button id="cpEdit" class="btn-new ghost sm">✏️ Editar</button>
       <button id="cpPdf" class="btn-new brand">📄 Relatório PDF</button>
     </div>
   </div>
 
-  <!-- KPIs -->
-  <section class="grid-cards stagger" style="margin-bottom:16px" id="cpKpis"></section>
+  <!-- Tabs internas do painel -->
+  <div class="cp-tabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--ink-200);overflow-x:auto">
+    <button class="cp-tab active" data-ctab="overview">📊 Visão Geral</button>
+    <button class="cp-tab" data-ctab="financial">💰 Financeiro</button>
+    <button class="cp-tab" data-ctab="machines">🔧 Máquinas</button>
+    <button class="cp-tab" data-ctab="maintenance">📅 Manutenção</button>
+    <button class="cp-tab" data-ctab="tickets">🎫 Chamados</button>
+    <button class="cp-tab" data-ctab="supplies">🧴 Insumos</button>
+    <button class="cp-tab" data-ctab="implantation">🏗️ Implantação</button>
+    <button class="cp-tab" data-ctab="portal">🔗 Portal & Acesso</button>
+    <button class="cp-tab" data-ctab="documents">📄 Documentos</button>
+  </div>
 
-  <!-- Gráficos -->
-  <section class="stagger" style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
-    <div class="card-new">
-      <div class="card-header"><div><div class="card-title">Evolução mensal</div><div class="subtle" style="font-size:12px;margin-top:2px">Repasse líquido · Líquido Lavandery · Receita total</div></div></div>
-      <div class="chart-box" style="height:280px"><canvas id="cpLine"></canvas></div>
-    </div>
-    <div class="card-new">
-      <div class="card-header"><div class="card-title">Ciclos por mês</div></div>
-      <div class="chart-box" style="height:280px"><canvas id="cpBar"></canvas></div>
-    </div>
-  </section>
-
-  <!-- Breakdown / Proporção -->
-  <section class="stagger" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-    <div class="card-new">
-      <div class="card-header"><div class="card-title">Repasse vs Retido (Lavandery)</div></div>
-      <div class="chart-box sm" style="height:240px"><canvas id="cpDonut"></canvas></div>
-    </div>
-    <div class="card-new">
-      <div class="card-header"><div class="card-title">Projeção anual</div></div>
-      <div id="cpProjection" style="padding:16px"></div>
-    </div>
-  </section>
-
-  <!-- Histórico detalhado -->
-  <section class="card-new">
-    <div class="card-header"><div class="card-title">Histórico detalhado</div></div>
-    <div id="cpTable" style="overflow-x:auto"></div>
-  </section>
+  <div id="cpTabOverview" class="cp-panel"></div>
+  <div id="cpTabFinancial" class="cp-panel" style="display:none"></div>
+  <div id="cpTabMachines" class="cp-panel" style="display:none"></div>
+  <div id="cpTabMaintenance" class="cp-panel" style="display:none"></div>
+  <div id="cpTabTickets" class="cp-panel" style="display:none"></div>
+  <div id="cpTabSupplies" class="cp-panel" style="display:none"></div>
+  <div id="cpTabImplantation" class="cp-panel" style="display:none"></div>
+  <div id="cpTabPortal" class="cp-panel" style="display:none"></div>
+  <div id="cpTabDocuments" class="cp-panel" style="display:none"></div>
 </main>
 
 <main class="page hidden" id="repassesMain">
@@ -2188,158 +2179,393 @@ function showTab(tab) {
 }
 
 // ---------- Integrations ----------
-// ---------- PAINEL ANALÍTICO POR CONDOMÍNIO ----------
-let _cpCondo = null, _cpRows = [], _cpCharts = {};
+// ---------- PAINEL ADMINISTRATIVO COMPLETO POR CONDOMÍNIO ----------
+let _cpCondo = null, _cpRows = [], _cpCharts = {}, _cpData = {};
+const _cpMoney = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const _cpDate = t => t ? new Date(t).toLocaleDateString('pt-BR') : '—';
+
 async function openCondoPanel(id) {
-  _cpCondo = _rpPageCondos.find(c => c.id === id) || (await fetch('/api/condominiums').then(r=>r.json())).find(c => c.id === id);
-  if (!_cpCondo) return;
-  _cpRows = await fetch('/api/condominiums/'+id+'/repasse').then(r => r.ok?r.json():[]);
-  // ordena por mês ASC
-  _cpRows.sort((a,b) => (a.month||'').localeCompare(b.month||''));
-  // Preenche dropdown de ano
-  const years = [...new Set(_cpRows.map(r => (r.month||'').slice(0,4)))].filter(Boolean).sort().reverse();
-  const yearSel = document.querySelector('#cpYear');
-  const curYear = String(new Date().getFullYear());
-  if (!years.includes(curYear)) years.unshift(curYear);
-  yearSel.innerHTML = years.map(y => `<option>${y}</option>`).join('');
-  yearSel.value = years[0] || curYear;
-  document.querySelector('#cpTitle').textContent = (_cpCondo.contract_name || _cpCondo.name || '—').toUpperCase();
-  document.querySelector('#cpSubtitle').textContent = [_cpCondo.address, _cpCondo.city].filter(Boolean).join(' · ') || `${_cpCondo.washers||0} lavadoras · ${_cpCondo.dryers||0} secadoras`;
-  showTab('condoPanel');
-  renderCondoPanel();
-}
-
-function renderCondoPanel() {
-  const year = document.querySelector('#cpYear').value;
-  const rows = _cpRows.filter(r => (r.month||'').startsWith(year));
-  const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const int = n => (+n||0).toLocaleString('pt-BR');
-
-  // KPIs
-  const totCiclos = rows.reduce((s,r) => s + (r.cycles||0), 0);
-  const totLav = rows.reduce((s,r) => s + (r.washes||0), 0);
-  const totSec = rows.reduce((s,r) => s + (r.dries||0), 0);
-  const totRepasse = rows.reduce((s,r) => s + (r.repasse_liquido||0), 0);
-  const totLavandery = rows.reduce((s,r) => s + (r.liquido_lavandery||0), 0);
-  const totReceita = rows.reduce((s,r) => s + (r.receita_maquina||0), 0);
-  const totImposto = rows.reduce((s,r) => s + (r.imposto||0), 0);
-  const ticketMedio = rows.length ? totRepasse / rows.length : 0;
-  const margem = totReceita > 0 ? (totLavandery / totReceita * 100) : 0;
-
-  const kpiCard = (label, value, hint, color) => `
-    <div class="card-kpi">
-      <div class="card-kpi-label">${label}</div>
-      <div class="card-kpi-value" style="${color?'color:'+color:''}">${value}</div>
-      ${hint?`<div class="card-kpi-hint">${hint}</div>`:''}
-    </div>`;
-  document.querySelector('#cpKpis').innerHTML =
-    kpiCard('Ciclos totais', int(totCiclos), `${int(totLav)} lav · ${int(totSec)} sec`) +
-    kpiCard('Repasse pago', money(totRepasse), `${rows.length} meses · ticket ${money(ticketMedio)}`, 'var(--brand-700)') +
-    kpiCard('Líquido Lavandery', money(totLavandery), `Margem ${margem.toFixed(1)}%`, '#10b981') +
-    kpiCard('Imposto recolhido', money(totImposto), `Receita total ${money(totReceita)}`, '#ef4444');
-
-  // Evolução mensal (line)
-  const labels = rows.map(r => r.month);
-  if (_cpCharts.line) _cpCharts.line.destroy();
-  _cpCharts.line = new Chart(document.querySelector('#cpLine'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label:'Repasse líquido', data: rows.map(r=>r.repasse_liquido||0), borderColor:'#7B5FC7', backgroundColor:'rgba(123,95,199,.12)', fill:true, tension:.35 },
-        { label:'Líquido Lavandery', data: rows.map(r=>r.liquido_lavandery||0), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.08)', fill:true, tension:.35 },
-        { label:'Receita total', data: rows.map(r=>r.receita_maquina||0), borderColor:'#6B6881', borderDash:[4,4], tension:.3 },
-      ],
-    },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:11 } } } }, scales:{ y:{ ticks:{ callback:v => 'R$ '+v.toLocaleString('pt-BR') } } } },
-  });
-
-  // Barras ciclos lav/sec
-  if (_cpCharts.bar) _cpCharts.bar.destroy();
-  _cpCharts.bar = new Chart(document.querySelector('#cpBar'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label:'Lavagens', data: rows.map(r=>r.washes||0), backgroundColor:'#A292D5' },
-        { label:'Secagens', data: rows.map(r=>r.dries||0), backgroundColor:'#7B5FC7' },
-      ],
-    },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:11 } } } }, scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } } },
-  });
-
-  // Donut repasse vs lavandery
-  if (_cpCharts.donut) _cpCharts.donut.destroy();
-  _cpCharts.donut = new Chart(document.querySelector('#cpDonut'), {
-    type: 'doughnut',
-    data: {
-      labels: ['Repasse condomínio', 'Imposto', 'Líquido Lavandery'],
-      datasets: [{ data: [totRepasse, totImposto, totLavandery], backgroundColor: ['#7B5FC7','#ef4444','#10b981'], borderWidth: 0 }],
-    },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:11 } } } } },
-  });
-
-  // Projeção: usa média dos últimos 3 meses × 12
-  const last3 = rows.slice(-3);
-  const avg = last3.length ? (last3.reduce((s,r)=>s+(r.repasse_liquido||0),0) / last3.length) : 0;
-  const proj12 = avg * 12;
-  const avgLav = last3.length ? (last3.reduce((s,r)=>s+(r.liquido_lavandery||0),0) / last3.length) : 0;
-  const projLav = avgLav * 12;
-  document.querySelector('#cpProjection').innerHTML = `
-    <div style="font-size:12px;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em">Média últimos ${last3.length} meses</div>
-    <div style="font-size:22px;font-weight:700;color:var(--brand-700);margin-top:4px">${money(avg)}</div>
-    <div style="font-size:11px;color:var(--ink-500);margin-top:2px">repasse médio mensal</div>
-    <div style="height:1px;background:var(--ink-100);margin:14px 0"></div>
-    <div style="display:flex;justify-content:space-between;font-size:13px"><span>Projeção anual repasse:</span><b>${money(proj12)}</b></div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px"><span>Projeção líquido Lavandery:</span><b style="color:#10b981">${money(projLav)}</b></div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px"><span>Total já acumulado ${year}:</span><b>${money(totRepasse)}</b></div>
+  _cpData = {};
+  const [condo, repasses, tickets, implantations, deliveries, cycleLogs] = await Promise.all([
+    fetch('/api/condominiums/'+id).then(r => r.ok?r.json():null),
+    fetch('/api/condominiums/'+id+'/repasse').then(r => r.ok?r.json():[]),
+    fetch('/api/tickets?condo_id='+id).then(r => r.ok?r.json():[]).catch(()=>[]),
+    fetch('/api/implantations?condo_id='+id).then(r => r.ok?r.json():[]).catch(()=>[]),
+    fetch('/api/equipment-deliveries?condo_id='+id).then(r => r.ok?r.json():[]).catch(()=>[]),
+    fetch('/api/cycle-logs?condo_id='+id).then(r => r.ok?r.json():[]).catch(()=>[]),
+  ]);
+  if (!condo) return;
+  _cpCondo = condo;
+  _cpRows = repasses.sort((a,b) => (a.month||'').localeCompare(b.month||''));
+  _cpData = { tickets, implantations, deliveries, cycleLogs };
+  // Header
+  document.querySelector('#cpTitle').textContent = (condo.contract_name || condo.name || '—').toUpperCase();
+  document.querySelector('#cpSubtitle').textContent = [condo.address, condo.city, condo.cep].filter(Boolean).join(' · ') || '—';
+  document.querySelector('#cpBadges').innerHTML = `
+    <span class="pill brand">${condo.washers||0} lavadoras</span>
+    <span class="pill">${condo.dryers||0} secadoras</span>
+    <span class="pill">${condo.maintenance_label||'Semestral'}</span>
+    ${condo.cnpj ? `<span class="pill neutral">CNPJ ${condo.cnpj}</span>` : ''}
+    ${condo.lat ? `<span class="pill success">📍 geocoded</span>` : `<span class="pill warning">⚠ sem GPS</span>`}
   `;
-
-  // Tabela histórico
-  document.querySelector('#cpTable').innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead style="background:var(--ink-50)"><tr>
-        <th style="text-align:left;padding:10px 12px">Mês</th>
-        <th style="text-align:right;padding:10px 12px">Lav</th>
-        <th style="text-align:right;padding:10px 12px">Sec</th>
-        <th style="text-align:right;padding:10px 12px">Ciclos</th>
-        <th style="text-align:right;padding:10px 12px">Tipo</th>
-        <th style="text-align:right;padding:10px 12px">Bruto</th>
-        <th style="text-align:right;padding:10px 12px">Imposto</th>
-        <th style="text-align:right;padding:10px 12px">Repasse líq.</th>
-        <th style="text-align:right;padding:10px 12px">Lavandery</th>
-      </tr></thead>
-      <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--ink-100)">
-        <td style="padding:8px 12px"><b>${r.month}</b></td>
-        <td style="padding:8px 12px;text-align:right">${r.washes||0}</td>
-        <td style="padding:8px 12px;text-align:right">${r.dries||0}</td>
-        <td style="padding:8px 12px;text-align:right"><b>${r.cycles||0}</b></td>
-        <td style="padding:8px 12px;text-align:right">${r.type==='fixed'?money(r.value)+'/c':r.value+'%'}</td>
-        <td style="padding:8px 12px;text-align:right">${money(r.repasse_bruto)}</td>
-        <td style="padding:8px 12px;text-align:right;color:#ef4444">${money(r.imposto)}</td>
-        <td style="padding:8px 12px;text-align:right;color:var(--brand-700);font-weight:600">${money(r.repasse_liquido)}</td>
-        <td style="padding:8px 12px;text-align:right;color:#10b981">${r.liquido_lavandery!=null?money(r.liquido_lavandery):'—'}</td>
-      </tr>`).join('')}
-      ${rows.length ? `<tr style="background:var(--brand-50);border-top:2px solid var(--brand-500)">
-        <td style="padding:10px 12px;font-weight:700">TOTAL ${year}</td>
-        <td style="padding:10px 12px;text-align:right;font-weight:700">${totLav}</td>
-        <td style="padding:10px 12px;text-align:right;font-weight:700">${totSec}</td>
-        <td style="padding:10px 12px;text-align:right;font-weight:700">${totCiclos}</td>
-        <td></td>
-        <td style="padding:10px 12px;text-align:right;font-weight:700">${money(rows.reduce((s,r)=>s+(r.repasse_bruto||0),0))}</td>
-        <td style="padding:10px 12px;text-align:right;font-weight:700;color:#ef4444">${money(totImposto)}</td>
-        <td style="padding:10px 12px;text-align:right;font-weight:700;color:var(--brand-700)">${money(totRepasse)}</td>
-        <td style="padding:10px 12px;text-align:right;font-weight:700;color:#10b981">${money(totLavandery)}</td>
-      </tr>` : '<tr><td colspan="9" style="padding:30px;text-align:center;color:var(--ink-400)">Nenhum repasse lançado em ' + year + '</td></tr>'}
-      </tbody>
-    </table>`;
+  showTab('condoPanel');
+  // Reset tabs: mostra overview
+  document.querySelectorAll('.cp-tab').forEach(t => t.classList.toggle('active', t.dataset.ctab==='overview'));
+  document.querySelectorAll('.cp-panel').forEach(p => p.style.display = p.id==='cpTabOverview'?'block':'none');
+  renderCpOverview();
+  renderCpFinancial();
+  renderCpMachines();
+  renderCpMaintenance();
+  renderCpTickets();
+  renderCpSupplies();
+  renderCpImplantation();
+  renderCpPortal();
+  renderCpDocuments();
 }
 
-document.querySelector('#cpYear')?.addEventListener('change', renderCondoPanel);
+// Troca de aba interna
+document.addEventListener('click', e => {
+  const tb = e.target.closest('.cp-tab');
+  if (tb) {
+    const tgt = tb.dataset.ctab;
+    document.querySelectorAll('.cp-tab').forEach(t => t.classList.toggle('active', t === tb));
+    const map = { overview:'cpTabOverview', financial:'cpTabFinancial', machines:'cpTabMachines', maintenance:'cpTabMaintenance', tickets:'cpTabTickets', supplies:'cpTabSupplies', implantation:'cpTabImplantation', portal:'cpTabPortal', documents:'cpTabDocuments' };
+    document.querySelectorAll('.cp-panel').forEach(p => p.style.display = 'none');
+    document.getElementById(map[tgt]).style.display = 'block';
+  }
+});
+
+// ========== VISÃO GERAL ==========
+function renderCpOverview() {
+  const c = _cpCondo;
+  const t = _cpData.tickets || [];
+  const openTickets = t.filter(x => x.status !== 'resolvido' && x.status !== 'fechado').length;
+  const totalRepasseYear = _cpRows.filter(r => (r.month||'').startsWith(String(new Date().getFullYear()))).reduce((s,r)=>s+(r.repasse_liquido||0),0);
+  const ultRepasse = _cpRows[_cpRows.length-1];
+  const avgCycles = _cpRows.length ? Math.round(_cpRows.reduce((s,r)=>s+(r.cycles||0),0) / _cpRows.length) : 0;
+  const fc = c.forecast || { soap:{days_left:'—',gallons_per_month:'—'}, softener:{days_left:'—'} };
+
+  document.querySelector('#cpTabOverview').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px">
+      <div class="kpi-mini"><div class="label">Repasse ${new Date().getFullYear()}</div><div class="value" style="color:var(--brand-700)">${_cpMoney(totalRepasseYear)}</div><div class="hint">acumulado no ano</div></div>
+      <div class="kpi-mini"><div class="label">Último repasse</div><div class="value">${ultRepasse?_cpMoney(ultRepasse.repasse_liquido):'—'}</div><div class="hint">${ultRepasse?ultRepasse.month:'sem lançamento'}</div></div>
+      <div class="kpi-mini"><div class="label">Média ciclos/mês</div><div class="value">${avgCycles.toLocaleString('pt-BR')}</div><div class="hint">${_cpRows.length} meses registrados</div></div>
+      <div class="kpi-mini"><div class="label">Chamados abertos</div><div class="value" style="color:${openTickets?'#ef4444':'#10b981'}">${openTickets}</div><div class="hint">${t.length} total no histórico</div></div>
+      <div class="kpi-mini"><div class="label">Sabão (projeção)</div><div class="value">${fc.soap.days_left}d</div><div class="hint">${c.soap_gallons_on_site||0} galões local</div></div>
+      <div class="kpi-mini"><div class="label">Amaciante (projeção)</div><div class="value">${fc.softener.days_left}d</div><div class="hint">${c.softener_gallons_on_site||0} galões local</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
+      <div class="card-new">
+        <div class="card-header"><div class="card-title">Informações cadastrais</div></div>
+        <div style="padding:14px">
+          <div class="info-row"><span class="k">Nome (contrato)</span><span class="v">${esc(c.contract_name||c.name||'—')}</span></div>
+          <div class="info-row"><span class="k">Endereço</span><span class="v">${esc(c.address||'—')}</span></div>
+          <div class="info-row"><span class="k">Cidade</span><span class="v">${esc(c.city||'—')}</span></div>
+          <div class="info-row"><span class="k">CEP</span><span class="v">${esc(c.cep||'—')}</span></div>
+          <div class="info-row"><span class="k">CNPJ</span><span class="v">${esc(c.cnpj||'—')}</span></div>
+          <div class="info-row"><span class="k">E-mail contato</span><span class="v">${esc(c.contact_email||'—')}</span></div>
+          <div class="info-row"><span class="k">Coordenadas</span><span class="v">${c.lat?`${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`:'—'}</span></div>
+          <div class="info-row"><span class="k">Cadastrado em</span><span class="v">${_cpDate(c.created_at)}</span></div>
+          <div class="info-row"><span class="k">Contrato Autentique</span><span class="v">${c.autentique_doc_id ? '<a href="https://painel.autentique.com.br/documentos/'+c.autentique_doc_id+'" target="_blank" style="color:var(--brand-700)">abrir ↗</a>' : '—'}</span></div>
+        </div>
+      </div>
+      <div class="card-new">
+        <div class="card-header"><div class="card-title">Localização</div></div>
+        <div id="cpMiniMap" style="height:320px;border-radius:10px;overflow:hidden"></div>
+      </div>
+    </div>
+  `;
+  // Mini mapa
+  if (c.lat && c.lng && typeof L !== 'undefined') {
+    setTimeout(() => {
+      const el = document.querySelector('#cpMiniMap');
+      if (!el || el._loaded) return; el._loaded = true;
+      const map = L.map(el).setView([c.lat, c.lng], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'OSM' }).addTo(map);
+      L.marker([c.lat, c.lng]).addTo(map).bindPopup(esc(c.name)).openPopup();
+    }, 60);
+  } else {
+    setTimeout(() => {
+      const el = document.querySelector('#cpMiniMap');
+      if (el) el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink-400)">Sem coordenadas geocodificadas</div>';
+    }, 60);
+  }
+}
+
+// ========== FINANCEIRO ==========
+function renderCpFinancial() {
+  const rows = _cpRows.slice().sort((a,b) => (a.month||'').localeCompare(b.month||''));
+  const year = String(new Date().getFullYear());
+  const yearRows = rows.filter(r => (r.month||'').startsWith(year));
+  const totCiclos = yearRows.reduce((s,r)=>s+(r.cycles||0),0);
+  const totLav = yearRows.reduce((s,r)=>s+(r.washes||0),0);
+  const totSec = yearRows.reduce((s,r)=>s+(r.dries||0),0);
+  const totRepasse = yearRows.reduce((s,r)=>s+(r.repasse_liquido||0),0);
+  const totLavandery = yearRows.reduce((s,r)=>s+(r.liquido_lavandery||0),0);
+  const totReceita = yearRows.reduce((s,r)=>s+(r.receita_maquina||0),0);
+  const totImposto = yearRows.reduce((s,r)=>s+(r.imposto||0),0);
+  const margem = totReceita>0 ? (totLavandery/totReceita*100) : 0;
+  const ticket = yearRows.length ? totRepasse/yearRows.length : 0;
+
+  document.querySelector('#cpTabFinancial').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+      <div class="kpi-mini"><div class="label">Ciclos ${year}</div><div class="value">${totCiclos.toLocaleString('pt-BR')}</div><div class="hint">${totLav} lav · ${totSec} sec</div></div>
+      <div class="kpi-mini"><div class="label">Repasse pago</div><div class="value" style="color:var(--brand-700)">${_cpMoney(totRepasse)}</div><div class="hint">ticket ${_cpMoney(ticket)}</div></div>
+      <div class="kpi-mini"><div class="label">Líquido Lavandery</div><div class="value" style="color:#10b981">${_cpMoney(totLavandery)}</div><div class="hint">margem ${margem.toFixed(1)}%</div></div>
+      <div class="kpi-mini"><div class="label">Imposto</div><div class="value" style="color:#ef4444">${_cpMoney(totImposto)}</div><div class="hint">receita total ${_cpMoney(totReceita)}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="card-new"><div class="card-header"><div class="card-title">Evolução mensal</div></div><div class="chart-box" style="height:260px"><canvas id="cpFinLine"></canvas></div></div>
+      <div class="card-new"><div class="card-header"><div class="card-title">Divisão do bolo</div></div><div class="chart-box sm" style="height:260px"><canvas id="cpFinDonut"></canvas></div></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Histórico completo</div></div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead style="background:var(--ink-50)"><tr>
+            <th style="text-align:left;padding:10px">Mês</th><th style="text-align:right;padding:10px">Lav</th>
+            <th style="text-align:right;padding:10px">Sec</th><th style="text-align:right;padding:10px">Ciclos</th>
+            <th style="text-align:right;padding:10px">Valor ciclo</th><th style="text-align:right;padding:10px">Repasse</th>
+            <th style="text-align:right;padding:10px">Imposto</th><th style="text-align:right;padding:10px">REPASSE LÍQ.</th>
+            <th style="text-align:right;padding:10px">Lavandery</th>
+          </tr></thead>
+          <tbody>${rows.length ? rows.map(r=>`<tr style="border-top:1px solid var(--ink-100)">
+            <td style="padding:8px 10px"><b>${r.month}</b></td>
+            <td style="padding:8px 10px;text-align:right">${r.washes||0}</td>
+            <td style="padding:8px 10px;text-align:right">${r.dries||0}</td>
+            <td style="padding:8px 10px;text-align:right"><b>${r.cycles||0}</b></td>
+            <td style="padding:8px 10px;text-align:right">${r.price?_cpMoney(r.price):'—'}</td>
+            <td style="padding:8px 10px;text-align:right">${r.type==='fixed'?_cpMoney(r.value)+'/c':r.value+'%'}</td>
+            <td style="padding:8px 10px;text-align:right;color:#ef4444">${_cpMoney(r.imposto)}</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--brand-700)">${_cpMoney(r.repasse_liquido)}</td>
+            <td style="padding:8px 10px;text-align:right;color:#10b981">${r.liquido_lavandery!=null?_cpMoney(r.liquido_lavandery):'—'}</td>
+          </tr>`).join('') : '<tr><td colspan="9" style="padding:30px;text-align:center;color:var(--ink-400)">Nenhum repasse lançado</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  // Gráficos
+  setTimeout(() => {
+    if (_cpCharts.finLine) _cpCharts.finLine.destroy();
+    _cpCharts.finLine = new Chart(document.querySelector('#cpFinLine'), {
+      type:'line', data:{ labels: yearRows.map(r=>r.month),
+        datasets: [
+          { label:'Repasse líq.', data: yearRows.map(r=>r.repasse_liquido||0), borderColor:'#7B5FC7', backgroundColor:'rgba(123,95,199,.15)', fill:true, tension:.35 },
+          { label:'Lavandery', data: yearRows.map(r=>r.liquido_lavandery||0), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.35 },
+        ]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom',labels:{boxWidth:10,font:{size:11}} } } },
+    });
+    if (_cpCharts.finDonut) _cpCharts.finDonut.destroy();
+    _cpCharts.finDonut = new Chart(document.querySelector('#cpFinDonut'), {
+      type:'doughnut', data:{ labels:['Condomínio','Imposto','Lavandery'],
+        datasets:[{ data:[totRepasse,totImposto,totLavandery], backgroundColor:['#7B5FC7','#ef4444','#10b981'], borderWidth:0 }]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom',labels:{boxWidth:10,font:{size:11}} } } },
+    });
+  }, 50);
+}
+
+// ========== MÁQUINAS ==========
+function renderCpMachines() {
+  const c = _cpCondo;
+  const m = c.machines || [];
+  const lav = m.filter(x => x.type === 'Lavadora');
+  const sec = m.filter(x => x.type === 'Secadora');
+  const dos = m.filter(x => x.type === 'Dosadora');
+  document.querySelector('#cpTabMachines').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+      <div class="kpi-mini"><div class="label">Total máquinas</div><div class="value">${m.length}</div></div>
+      <div class="kpi-mini"><div class="label">Lavadoras</div><div class="value" style="color:#7B5FC7">${lav.length}</div><div class="hint">cadastradas: ${c.washers||0}</div></div>
+      <div class="kpi-mini"><div class="label">Secadoras</div><div class="value" style="color:#A292D5">${sec.length}</div><div class="hint">cadastradas: ${c.dryers||0}</div></div>
+      <div class="kpi-mini"><div class="label">Dosadoras</div><div class="value">${dos.length}</div></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Lista de máquinas</div><button class="btn-new brand sm" onclick="openCondoDrawer('${c.id}')">+ Gerenciar</button></div>
+      <div style="padding:14px">
+        ${m.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">
+          ${m.map(x=>`<div style="padding:12px;background:rgba(255,255,255,.6);border:1px solid var(--ink-200);border-radius:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>${esc(x.code||'—')}</b><span class="pill ${x.type==='Lavadora'?'brand':''}">${esc(x.type||'')}</span></div>
+            <div style="font-size:12px;color:var(--ink-500)">${esc(x.brand||'—')} · ${esc(x.capacity||'—')}</div>
+          </div>`).join('')}
+        </div>` : '<div style="padding:20px;text-align:center;color:var(--ink-400)">Nenhuma máquina cadastrada. Clique em <b>+ Gerenciar</b> pra adicionar.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+// ========== MANUTENÇÃO ==========
+function renderCpMaintenance() {
+  const c = _cpCondo;
+  const sched = c.schedule || [];
+  const future = sched.filter(s => new Date(s.date) >= new Date()).slice(0, 10);
+  const past = sched.filter(s => new Date(s.date) < new Date()).slice(-10).reverse();
+  document.querySelector('#cpTabMaintenance').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px">
+      <div class="kpi-mini"><div class="label">Frequência</div><div class="value">${c.maintenance_label||c.maintenance_interval_months+' meses'||'Semestral'}</div></div>
+      <div class="kpi-mini"><div class="label">Próximas visitas</div><div class="value">${future.length}</div></div>
+      <div class="kpi-mini"><div class="label">Total no histórico</div><div class="value">${sched.length}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card-new">
+        <div class="card-header"><div class="card-title">📅 Próximas visitas</div></div>
+        <div style="padding:10px 14px">
+          ${future.length ? future.map(s=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--ink-100);font-size:13px"><span><b>${_cpDate(s.date)}</b> ${s.scheduled_time||''}</span><span class="pill">${esc(s.type)}</span></div>`).join('') : '<div style="padding:20px;text-align:center;color:var(--ink-400)">Nenhuma visita agendada</div>'}
+        </div>
+      </div>
+      <div class="card-new">
+        <div class="card-header"><div class="card-title">✅ Últimas realizadas</div></div>
+        <div style="padding:10px 14px">
+          ${past.length ? past.map(s=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--ink-100);font-size:13px"><span><b>${_cpDate(s.date)}</b></span><span class="pill ${s.status==='done'?'success':'neutral'}">${esc(s.status||'—')}</span></div>`).join('') : '<div style="padding:20px;text-align:center;color:var(--ink-400)">Nenhuma visita realizada</div>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ========== CHAMADOS ==========
+function renderCpTickets() {
+  const t = _cpData.tickets || [];
+  const open = t.filter(x => !['resolvido','fechado'].includes(x.status));
+  const closed = t.filter(x => ['resolvido','fechado'].includes(x.status));
+  const urgent = t.filter(x => x.priority === 'urgente' || x.priority === 'alta');
+  document.querySelector('#cpTabTickets').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
+      <div class="kpi-mini"><div class="label">Total</div><div class="value">${t.length}</div></div>
+      <div class="kpi-mini"><div class="label">Abertos</div><div class="value" style="color:${open.length?'#ef4444':'#10b981'}">${open.length}</div></div>
+      <div class="kpi-mini"><div class="label">Resolvidos</div><div class="value" style="color:#10b981">${closed.length}</div></div>
+      <div class="kpi-mini"><div class="label">Urgentes/Alta</div><div class="value" style="color:#f59e0b">${urgent.length}</div></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Lista de chamados</div></div>
+      <div style="padding:10px 14px">
+        ${t.length ? t.slice(0, 30).map(x=>`
+          <div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--ink-100);font-size:13px">
+            <div style="flex:1;min-width:0">
+              <div><b>${esc(x.title)}</b></div>
+              <div style="font-size:11px;color:var(--ink-500);margin-top:2px">${_cpDate(x.created_at)} · ${esc(x.category||'—')} · ${esc(x.opened_by_name||'—')}</div>
+            </div>
+            <span class="pill ${x.status==='aberto'?'danger':x.status==='em_andamento'?'warning':'success'}">${esc(x.status)}</span>
+          </div>
+        `).join('') : '<div style="padding:20px;text-align:center;color:var(--ink-400)">Nenhum chamado</div>'}
+      </div>
+    </div>
+  `;
+}
+
+// ========== INSUMOS ==========
+function renderCpSupplies() {
+  const c = _cpCondo;
+  const dl = _cpData.deliveries || [];
+  const fc = c.forecast || {};
+  document.querySelector('#cpTabSupplies').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+      <div class="kpi-mini"><div class="label">Sabão no local</div><div class="value">${c.soap_gallons_on_site||0} gal</div><div class="hint">consumo ${c.soap_ml_per_cycle||50}ml/ciclo</div></div>
+      <div class="kpi-mini"><div class="label">Sabão restante</div><div class="value" style="color:${fc.soap?.days_left<7?'#ef4444':'var(--ink-900)'}">${fc.soap?.days_left||'—'}d</div><div class="hint">~${fc.soap?.gallons_per_month||'—'}gal/mês</div></div>
+      <div class="kpi-mini"><div class="label">Amaciante no local</div><div class="value">${c.softener_gallons_on_site||0} gal</div><div class="hint">${c.softener_ml_per_cycle||50}ml/ciclo</div></div>
+      <div class="kpi-mini"><div class="label">Amaciante restante</div><div class="value" style="color:${fc.softener?.days_left<7?'#ef4444':'var(--ink-900)'}">${fc.softener?.days_left||'—'}d</div><div class="hint">${c.gallon_ml||5000}ml/galão</div></div>
+    </div>
+    <div class="card-new">
+      <div class="card-header"><div class="card-title">Histórico de entregas</div></div>
+      <div style="padding:10px 14px">
+        ${(c.deliveries||[]).length ? (c.deliveries||[]).map(d=>`
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--ink-100);font-size:13px">
+            <span><b>${_cpDate(d.delivered_at)}</b> — ${d.product==='soap'?'🧴 Sabão':'🌸 Amaciante'}</span>
+            <span class="pill">${d.gallons} galões</span>
+          </div>
+        `).join('') : '<div style="padding:20px;text-align:center;color:var(--ink-400)">Sem entregas registradas</div>'}
+      </div>
+    </div>
+  `;
+}
+
+// ========== IMPLANTAÇÃO ==========
+function renderCpImplantation() {
+  const im = (_cpData.implantations || [])[0];
+  const host = document.querySelector('#cpTabImplantation');
+  if (!im) {
+    host.innerHTML = '<div class="card-new"><div style="padding:40px;text-align:center;color:var(--ink-400)">Nenhuma implantação registrada</div></div>';
+    return;
+  }
+  const progress = im.progress_pct || Math.round((im.completed_steps||0) / (im.total_steps||1) * 100);
+  host.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+      <div class="kpi-mini"><div class="label">Status</div><div class="value" style="font-size:14px">${esc(im.status||'—')}</div></div>
+      <div class="kpi-mini"><div class="label">Progresso</div><div class="value" style="color:var(--brand-700)">${progress}%</div><div class="hint">${im.completed_steps||0}/${im.total_steps||0} etapas</div></div>
+      <div class="kpi-mini"><div class="label">Tipo</div><div class="value" style="font-size:14px">${esc(im.type||'Padrão')}</div></div>
+      <div class="kpi-mini"><div class="label">Prazo SLA</div><div class="value">${im.deadline_at?_cpDate(im.deadline_at):'60d'}</div></div>
+    </div>
+    <div class="card-new"><div class="card-header"><div class="card-title">Detalhes</div></div><div style="padding:14px;font-size:13px">
+      <div class="info-row"><span class="k">Iniciada em</span><span class="v">${_cpDate(im.started_at)}</span></div>
+      <div class="info-row"><span class="k">Técnico responsável</span><span class="v">${esc(im.technician_name||'—')}</span></div>
+      <div class="info-row"><span class="k">Última atualização</span><span class="v">${_cpDate(im.updated_at)}</span></div>
+      <div style="margin-top:14px"><div style="height:8px;background:var(--ink-100);border-radius:4px;overflow:hidden"><div style="height:100%;width:${progress}%;background:linear-gradient(90deg,#7B5FC7,#A292D5)"></div></div></div>
+    </div></div>
+  `;
+}
+
+// ========== PORTAL & ACESSO ==========
+function renderCpPortal() {
+  const c = _cpCondo;
+  const slug = (c.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const ticketUrl = location.origin + '/chamado.html?condo=' + c.id;
+  const condoUrl = location.origin + '/condo-login.html';
+  document.querySelector('#cpTabPortal').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card-new"><div class="card-header"><div class="card-title">🏢 Portal do condomínio</div></div>
+        <div style="padding:14px;font-size:13px">
+          <div class="info-row"><span class="k">URL</span><span class="v"><a href="${condoUrl}" target="_blank" style="color:var(--brand-700)">${condoUrl}</a></span></div>
+          <div class="info-row"><span class="k">Nome de login</span><span class="v">${esc(c.name)}</span></div>
+          <div class="info-row"><span class="k">Senha padrão</span><span class="v"><code>Mudar123@@2026</code></span></div>
+          <div style="margin-top:14px">
+            <button class="btn-new ghost sm" onclick="navigator.clipboard.writeText('${condoUrl}').then(()=>Toast.success('URL copiada'))">📋 Copiar URL</button>
+            <button class="btn-new ghost sm" onclick="navigator.clipboard.writeText('${c.name}').then(()=>Toast.success('Nome copiado'))">📋 Copiar nome</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-new"><div class="card-header"><div class="card-title">🎫 Link público de chamados</div></div>
+        <div style="padding:14px;font-size:13px">
+          <div style="background:#fff;border:1px solid var(--ink-200);border-radius:8px;padding:10px;margin-bottom:10px;word-break:break-all;font-size:12px">${ticketUrl}</div>
+          <button class="btn-new brand sm" onclick="navigator.clipboard.writeText('${ticketUrl}').then(()=>Toast.success('Link copiado'))">📋 Copiar link</button>
+          <a class="btn-new ghost sm" href="${ticketUrl}" target="_blank" style="margin-left:6px">↗ Abrir</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ========== DOCUMENTOS ==========
+function renderCpDocuments() {
+  const c = _cpCondo;
+  const dl = _cpData.deliveries || [];
+  document.querySelector('#cpTabDocuments').innerHTML = `
+    <div class="card-new"><div class="card-header"><div class="card-title">📄 Contrato Autentique</div></div>
+      <div style="padding:14px;font-size:13px">
+        ${c.autentique_doc_id ? `
+          <div class="info-row"><span class="k">Document ID</span><span class="v"><code>${c.autentique_doc_id}</code></span></div>
+          <div class="info-row"><span class="k">Nome extraído</span><span class="v">${esc(c.contract_name||'—')}</span></div>
+          <div style="margin-top:14px"><a href="https://painel.autentique.com.br/documentos/${c.autentique_doc_id}" target="_blank" class="btn-new brand sm">↗ Abrir no Autentique</a></div>
+        ` : '<div style="padding:20px;text-align:center;color:var(--ink-400)">Sem contrato vinculado</div>'}
+      </div>
+    </div>
+    <div class="card-new" style="margin-top:16px"><div class="card-header"><div class="card-title">🏭 Entregas de equipamentos</div></div>
+      <div style="padding:14px">
+        ${dl.length ? dl.map(x=>`
+          <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--ink-100);font-size:13px">
+            <div><b>${esc(x.reference||x.id)}</b><div style="font-size:11px;color:var(--ink-500)">${_cpDate(x.delivered_at||x.created_at)}</div></div>
+            <div style="text-align:right"><b>${_cpMoney(x.total_value)}</b><div style="font-size:11px;color:var(--ink-500)">${esc(x.status||'—')}</div></div>
+          </div>
+        `).join('') : '<div style="padding:20px;text-align:center;color:var(--ink-400)">Nenhuma entrega registrada</div>'}
+      </div>
+    </div>
+  `;
+}
+
+// Botões de ação no header do painel
+document.querySelector('#cpEdit')?.addEventListener('click', () => _cpCondo && openCondoDrawer(_cpCondo.id));
 document.querySelector('#cpBack')?.addEventListener('click', () => showTab('repasses'));
 document.querySelector('#cpPdf')?.addEventListener('click', () => {
   if (!_cpCondo) return;
-  const year = document.querySelector('#cpYear').value;
+  const year = String(new Date().getFullYear());
   window.open(`/api/condominiums/${_cpCondo.id}/repasse-report.pdf?year=${year}`, '_blank');
 });
 

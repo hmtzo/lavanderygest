@@ -657,3 +657,17 @@ h3 { font-size: 16px; line-height: 1.4; }
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Painel de condomínio — tabs internas */
+.cp-tab { background:transparent; border:none; padding:10px 16px; border-bottom:2px solid transparent; font-size:13px; font-weight:500; color:var(--ink-500); cursor:pointer; white-space:nowrap; font-family:inherit; transition:all .2s; }
+.cp-tab:hover { color:var(--ink-900); }
+.cp-tab.active { color:var(--brand-700); border-bottom-color:var(--brand-700); font-weight:600; }
+.cp-panel { animation:fadeIn .2s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+.kpi-mini { background:rgba(255,255,255,.7); border:1px solid var(--ink-200); border-radius:12px; padding:14px 16px; }
+.kpi-mini .label { font-size:10px; font-weight:600; color:var(--ink-500); text-transform:uppercase; letter-spacing:.05em; }
+.kpi-mini .value { font-size:22px; font-weight:700; color:var(--ink-900); margin-top:4px; letter-spacing:-.02em; }
+.kpi-mini .hint { font-size:11px; color:var(--ink-500); margin-top:4px; }
+.info-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--ink-100); font-size:13px; }
+.info-row .k { color:var(--ink-500); }
+.info-row .v { color:var(--ink-900); font-weight:500; }
