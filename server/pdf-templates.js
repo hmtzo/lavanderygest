@@ -94,47 +94,28 @@ function signatureBlock(doc, y, leftLabel, rightLabel) {
   doc.text(rightLabel, W-50-half/2, y+12, { align:'center' });
 }
 
-// ---------- 1) Termo de entrega de máquinas ----------
+// ---------- 1) Termo de entrega (delega pro template oficial Lavandery) ----------
 export function generateDeliveryReceipt(impl, condo, machines = []) {
-  const doc = new jsPDF({ unit:'pt', format:'a4' });
-  const W = doc.internal.pageSize.getWidth();
-  header(doc, 'Termo de entrega de equipamentos');
-
-  let y = condoBlock(doc, condo, impl, 130);
-
-  y = section(doc, 'Equipamentos entregues', y);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(...INK);
-  const washers = condo.washers || 0, dryers = condo.dryers || 0;
-  const list = [
-    { name: 'Lavadoras', qty: washers },
-    { name: 'Secadoras', qty: dryers },
-    { name: 'Dosadoras', qty: Math.max(1, Math.floor((washers+dryers)/2)) },
-  ];
-  list.forEach(it => {
-    checkbox(doc, 50, y+10, true);
-    doc.text(`${it.qty} × ${it.name}`, 68, y+10);
-    y += 20;
+  const washers = condo.washers || (machines||[]).filter(m=>m.type==='Lavadora').length || 0;
+  const dryers = condo.dryers || (machines||[]).filter(m=>m.type==='Secadora').length || 0;
+  // Usa o número de conjuntos = min(lavadoras, secadoras). Cada conjunto = 1 lav + 1 sec.
+  const conjuntos = Math.max(1, Math.min(washers, dryers) || Math.max(washers, dryers) || 1);
+  const unitValue = 52000;
+  return generateEquipmentDeliveryTerm({
+    id: impl.id || ('impl_' + Date.now()),
+    condo_name: (condo.name||'').toUpperCase(),
+    condo_cnpj: condo.cnpj || '',
+    condo_address: [condo.address, condo.city, condo.cep].filter(Boolean).join(' · '),
+    conjuntos_qty: conjuntos,
+    unit_value: unitValue,
+    total_value: unitValue * conjuntos,
+    equipment_brand: 'SPEED QUEEN',
+    condition_new: true,
+    delivery_date: impl.completed_at || Date.now(),
+    finalized_at: Date.now(),
+    responsible_name: '',
+    signature_data_url: null,
   });
-  (machines||[]).forEach(m => {
-    doc.setFontSize(9); doc.setTextColor(...MUTED);
-    doc.text(`• ${m.code} (${m.type}${m.brand?' · '+m.brand:''}${m.capacity?' · '+m.capacity:''})`, 68, y);
-    y += 14;
-  });
-
-  y += 10;
-  y = section(doc, 'Declaração', y);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...INK);
-  const decl = `Declaramos que os equipamentos listados acima foram entregues em perfeito estado de funcionamento ao CONDOMÍNIO, sob responsabilidade da LAVANDERY (INOVA TECNOLOGIA E SERVIÇOS E REPRESENTAÇÃO LTDA, CNPJ 45.061.358/0001-62), em regime de comodato, conforme contrato vigente.`;
-  doc.text(doc.splitTextToSize(decl, W-80), 40, y);
-  y += 70;
-
-  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...MUTED);
-  doc.text(`Entrega realizada em: ${fmtDate(Date.now())}`, 40, y);
-
-  y = Math.max(y, doc.internal.pageSize.getHeight() - 110);
-  signatureBlock(doc, y, 'Responsável Lavandery', 'Responsável pelo condomínio');
-  footer(doc, impl.id.slice(-8).toUpperCase(), 1);
-  return Buffer.from(doc.output('arraybuffer'));
 }
 
 // ---------- 2) Checklist de vistoria técnica ----------
