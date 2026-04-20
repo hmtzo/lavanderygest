@@ -1004,7 +1004,6 @@ async function load() {
 function renderKPIs(d) {
   const items = [
     ['Condomínios', d.totals.condos, 'condos', '#533C9D', 'ativos no contrato'],
-    ['Máquinas', `${d.totals.washers}L + ${d.totals.dryers}S`, 'condos', '#654ABA', `${d.totals.washers + d.totals.dryers} equipamentos`],
     ['Agenda ' + d.year, d.visits.year, 'schedule', '#9C83D8', 'visitas planejadas'],
     ['Próximos 7 dias', d.visits.next7, 'schedule', '#10B981', 'visitas programadas'],
     ['Entregas urgentes', d.supplies.urgente, 'supplies', d.supplies.urgente ? '#EF4444' : '#10B981', d.supplies.urgente ? 'atenção imediata' : 'tudo sob controle'],
