@@ -2463,70 +2463,135 @@ app.post('/api/condominiums/wipe-all', (req, res) => {
   res.json({ ok:true, deleted: before });
 });
 
-// Importa do Autentique apenas contratos 100% ASSINADOS e que sejam de condomínio real
+// Importa do Autentique: contratos assinados pelo CONTRATANTE, dedup por nome, classifica implantado por data
 app.post('/api/condominiums/auto-import-signed', async (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   try {
-    // 1) Busca todos os contratos do cache (já importados antes) + fetch na Autentique
-    const docs = await listAllDocuments({ context: 'ORGANIZATION', pageSize: 60 });
+    // 1) Busca contratos da organização inteira (ambos contextos)
+    const [orgDocs, userDocs] = await Promise.all([
+      listAllDocuments({ context: 'ORGANIZATION', pageSize: 60 }).catch(() => ({ data: [] })),
+      listAllDocuments({ context: 'USER', pageSize: 60 }).catch(() => ({ data: [] })),
+    ]);
+    const seenIds = new Set();
+    const all = [];
+    for (const d of [...orgDocs.data, ...userDocs.data]) {
+      if (!seenIds.has(d.id)) { seenIds.add(d.id); all.push(d); }
+    }
+
     const cache = Object.fromEntries(
       db.prepare('SELECT document_id, extracted FROM contract_cache').all()
         .map(c => [c.document_id, JSON.parse(c.extracted||'null')])
     );
 
-    const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    // Normalização pro UPPERCASE sem acento
+    const stripAccent = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const toUpperNoAccent = s => stripAccent(String(s||'')).toUpperCase().replace(/\s+/g,' ').trim();
+    const slug = s => stripAccent(String(s||'')).toLowerCase().replace(/[^a-z0-9]/g,'');
+
+    // Verifica se é nome de condomínio real
     const isCondoName = n => {
-      const s = String(n||'').toUpperCase();
-      if (/FERIAS\s+COLETIVAS|REGISTRO\s*BR|^TESTE|^MINUTA|CANCELAMENTO/i.test(s)) return false;
-      return /CONDOM[ÍI]NIO|EDIF[ÍI]CIO|RESIDENCIAL|EDILICIO|CONJUNTO|HABITAT/i.test(s);
-    };
-    const isFullySigned = (doc) => {
-      if (!doc.signatures || !doc.signatures.length) return false;
-      // Todos os signatários que têm `action.name === 'SIGN'` precisam ter `signed.created_at`
-      const signers = doc.signatures.filter(s => !s.action || s.action.name === 'SIGN' || s.action.name === 'SIGNER');
-      if (!signers.length) return false;
-      return signers.every(s => s.signed && s.signed.created_at);
+      const s = toUpperNoAccent(n);
+      if (!s) return false;
+      if (/FERIAS|REGISTRO\s*BR|REGISTROBR|^TESTE|MINUTA|CANCELAMENTO|^APENAS|PROPOSTA\s*MODELO/i.test(s)) return false;
+      // Precisa ter keyword típica de condomínio
+      return /CONDOMINIO|EDIFICIO|RESIDENCIAL|EDILICIO|CONJUNTO|HABITAT|HELBOR|BRERA|CYRELA|VIBRA|VIVAZ|VIVA\s*BENX|VIVABENX|METROCASA|THERA|SAMPA|TERRACO|SKY\s|URBAN|NYC|BENX|NOW|VIEW\s|STATION|STUDIO|MAX\s|MOOV|ARIZONA|TURIASSU|UPPER|BORGES|CUPECE|VILL[AE]|PARK|HOUSE|HOUX|HELLO|FLOR\s+DE|JARDIM|SALE|HOME\s|JARDINS|ATLANTICO|ALPHA|ALEGRO|MARROCOS|EXALT|IBIRAPUERA|PERDIZES|CIDADE|OLIMPIA|GUILHERMINA|LUMIS|WELCONX|DOMUS|TANGARA|ASSUMIRA|PAULICEIA|GOLDEN|PALACETE|STUDIOS|CAMBUCI|BOM\s*FIM|DONA\s*LINDU|GRAVURA|APLAUSO|CAMINHO|PORTAL|CASA\s|VN\s|NUN\s|DOT\s|VIVA\s+BENX|APICE|BUTANTA|CONCEIC[AO]ES|CONCEICAO|ONZE\s|SANTA\s|TUCUNA|MUNDO\s+APTO|LAST|ALL\s|PORTO|MERITO|MOEMA|ALPHAVIEW|N\s*URBAN|NEX\s*ONE|SAINT|SERENO|ZOOM|GIGRAN|MARE\s+ALTA|MISTRAL|COMPOSITE|INNOVA|TODAY|CORAZ|UPSIDE|ATMOSFERA|UPTOWN|ESTILO\s+BARROCO|VIVART|FACTO|ESQUINA|BENX\s*II|DEZ\s|NOVO\s|HELLO|METRO\s+CASA|MODERN|AMBIENCE|CYRELA\s+FOR|SIDE|FOR\s+LIFE|FOR\s+YOU|FOR\s+CONSOLAC|PRIME|HELBOR|CAPOTE|OSCAR|CASA\s+ALVARO|CHACARA|CHACRA|VILA\s|RAIZES|FAMILIA|TSS|CYRELLA|PIAZZA|VIEW|CLUBE|ROOKIE|BALIMC/i.test(s);
     };
 
-    // 2) Filtra
-    const candidates = docs.data.filter(doc => {
-      const ext = cache[doc.id];
-      const name = ext?.name || doc.name || '';
-      if (!isCondoName(name)) return false;
-      if (!isFullySigned(doc)) return false;
-      return true;
-    });
+    // Contratante assinou? (signatário que não é @lavandery / @inova)
+    const LAVANDERY_EMAIL_RE = /@(lavandery|inovalavandery|inovatec|inova\.)|\.lavandery\./i;
+    function contratanteSigned(doc) {
+      if (!doc.signatures || !doc.signatures.length) return null;
+      for (const s of doc.signatures) {
+        if (!s.signed || !s.signed.created_at) continue;
+        if (s.email && LAVANDERY_EMAIL_RE.test(s.email)) continue;
+        // Este é o contratante e assinou
+        return s.signed.created_at;
+      }
+      return null;
+    }
 
-    // 3) Upsert condos
+    // 2) Classifica candidatos
+    const NOV_2025 = new Date('2025-11-01T00:00:00Z').getTime();
+    const candidates = [];
+    for (const doc of all) {
+      const ext = cache[doc.id] || {};
+      // Nome primário = extraído do PDF (CONTRATANTE), fallback = doc.name
+      const rawName = (ext.name && ext.name.trim()) || doc.name || '';
+      if (!isCondoName(rawName)) continue;
+      const signedAt = contratanteSigned(doc);
+      if (!signedAt) continue;
+      const signedTs = new Date(signedAt).getTime();
+      const cleanedName = toUpperNoAccent(rawName)
+        .replace(/^CONTRATO[-\s_]+(COMODATO|GESTAO|GESTÃO|SERVICO|SERVIÇO)[-\s_]+/i,'')
+        .replace(/^CONTRATO[-\s_]+/i,'')
+        .replace(/\s*\(\d+\)\s*$/g,'')
+        .replace(/\s+(ATUALIZADO|VER\.?\s*\d+|REV\.?\s*\d+).*$/i,'')
+        .replace(/\s+/g,' ').trim();
+      candidates.push({
+        doc, ext, name: cleanedName, key: slug(cleanedName),
+        signedAt: signedTs,
+        implanted: signedTs < NOV_2025,
+      });
+    }
+
+    // 3) Dedup por slug — mantém o mais antigo (primeira assinatura)
+    const byKey = new Map();
+    for (const c of candidates) {
+      if (!c.key) continue;
+      const prev = byKey.get(c.key);
+      if (!prev || c.signedAt < prev.signedAt) byKey.set(c.key, c);
+    }
+    const finalList = [...byKey.values()];
+
+    // 4) Upsert condos
     const upsertCondo = db.prepare(`INSERT INTO condominiums
-      (id,name,address,city,cep,cnpj,washers,dryers,contract_source,autentique_doc_id,maintenance_interval_months,maintenance_label,is_contract)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)
+      (id,name,address,city,cep,cnpj,washers,dryers,contract_source,autentique_doc_id,maintenance_interval_months,maintenance_label,is_contract,contract_sign_date)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?)
       ON CONFLICT(id) DO UPDATE SET name=excluded.name, autentique_doc_id=excluded.autentique_doc_id,
+        contract_sign_date=excluded.contract_sign_date,
         address=COALESCE(excluded.address, condominiums.address),
         city=COALESCE(excluded.city, condominiums.city),
         cep=COALESCE(excluded.cep, condominiums.cep),
         cnpj=COALESCE(excluded.cnpj, condominiums.cnpj)`);
     const insMachine = db.prepare(`INSERT OR IGNORE INTO machines (id,condo_id,code,type,brand,capacity) VALUES (?,?,?,?,?,?)`);
+    const insImpl = db.prepare(`INSERT OR REPLACE INTO implantations (id, condo_id, status, target_date, started_at, completed_at, contract_signed_at)
+      VALUES (?,?,?,?,?,?,?)`);
 
-    let imported = 0;
-    for (const doc of candidates) {
-      const ext = cache[doc.id] || {};
-      const name = (ext.name || doc.name || '').toString().toUpperCase().trim()
-        .replace(/^CONTRATO[-\s_]+(COMODATO|GEST[ÃA]O|SERVI[ÇC]O)[-\s_]+/i,'')
-        .replace(/\s*\(\d+\)\s*$/g,'').replace(/\s+/g,' ').trim();
-      const id = 'c_' + norm(name).slice(0, 24);
-      if (!id || id.length < 5) continue;
+    let imported = 0, markedImplanted = 0, markedPending = 0;
+    for (const c of finalList) {
+      const id = 'c_' + c.key.slice(0, 28);
+      const ext = c.ext;
       const w = ext.washers|0, d = ext.dryers|0;
       const freq = ext.maintenance?.intervalMonths || null;
       const label = ext.maintenance?.label || null;
-      upsertCondo.run(id, name,
-        ext.address||'', ext.city||'', ext.cep||null, ext.cnpj||null,
-        w, d, 'autentique', doc.id, freq, label);
+      const signDateStr = new Date(c.signedAt).toISOString().slice(0,10);
+      upsertCondo.run(id, c.name, ext.address||'', ext.city||'', ext.cep||null, ext.cnpj||null,
+        w, d, 'autentique', c.doc.id, freq, label, signDateStr);
       for (let i=1;i<=w;i++) insMachine.run(`${id}_lvd${i}`, id, `LVD-${String(i).padStart(3,'0')}`, 'Lavadora', '', '');
       for (let i=1;i<=d;i++) insMachine.run(`${id}_scr${i}`, id, `SCR-${String(i).padStart(3,'0')}`, 'Secadora', '', '');
+
+      // Cria implantação: concluída (antes de nov/2025) ou em_andamento (a partir de nov/2025)
+      const implId = 'impl_' + id;
+      const target = new Date(c.signedAt + 60*86400_000).toISOString().slice(0,10); // SLA 60d
+      if (c.implanted) {
+        insImpl.run(implId, id, 'concluida', target, c.signedAt, c.signedAt + 30*86400_000, c.signedAt);
+        markedImplanted++;
+      } else {
+        insImpl.run(implId, id, 'agendada', target, null, null, c.signedAt);
+        markedPending++;
+      }
       imported++;
     }
-    res.json({ ok:true, total_contracts: docs.data.length, signed_condo_contracts: candidates.length, imported });
+
+    res.json({
+      ok:true,
+      total_contracts: all.length,
+      signed_contratante: candidates.length,
+      unique_condos: finalList.length,
+      imported,
+      implanted_pre_nov2025: markedImplanted,
+      pending_from_nov2025: markedPending,
+    });
   } catch (e) {
     console.error('[auto-import-signed]', e);
     res.status(500).json({ error:'import_failed', detail: String(e.message||e) });
