@@ -2014,7 +2014,7 @@ app.get('/api/repasses/report.pdf', async (req, res) => {
     LEFT JOIN condominiums c ON c.id=cr.condo_id
     WHERE cr.month=? ORDER BY c.name`).all(month);
   try {
-    const { default: jsPDF } = await import('jspdf');
+    const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit:'pt', format:'a4', orientation:'landscape' });
     const W = 842, pad = 30;
     doc.setFillColor(83,60,157); doc.rect(0,0,W,60,'F');
@@ -2136,7 +2136,7 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
   const avgCycles = history.length ? Math.round(history.reduce((s,h)=>s+(h.cycles||0),0)/history.length) : 0;
 
   try {
-    const { default: jsPDF } = await import('jspdf');
+    const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const W = 595, H = 842, pad = 40;
     const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2342,7 +2342,7 @@ app.get('/api/condominiums/:id/repasse-report.pdf', async (req, res) => {
   if (!condo) return res.status(404).json({ error: 'not_found' });
   const rows = db.prepare(`SELECT * FROM condo_repasse WHERE condo_id=? AND month LIKE ? ORDER BY month`).all(cid, year+'%');
   try {
-    const { default: jsPDF } = await import('jspdf');
+    const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit:'pt', format:'a4' });
     const W = 595, pad = 40;
     doc.setFillColor(83,60,157); doc.rect(0,0,W,70,'F');
