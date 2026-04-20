@@ -13,6 +13,7 @@ import { waStatus, waConnect, waDisconnect, waSendText, waAutoStart } from './wh
 import { gmapsTest, gmapsGeocode, gmapsRoute, s3Test, s3PresignUpload, s3PutObject, asaasTest, asaasCreateCustomer, asaasCreateCharge, asaasListCharges, sentryInit, sentryCapture, sentryTest } from './integrations-services.js';
 import { firebaseTest, firebaseUpload } from './firebase.js';
 import { driveTest, driveUpload } from './gdrive.js';
+import { extractSheetId, listTabs, fetchTabCsv, parseCsv, classifyTab, parseCondoTab, calculateRepasse, validateCalc, detectModel } from './repasse.js';
 import { generateDeliveryReceipt, generateSurveyChecklist, generateInstallationReport, generateEquipmentDeliveryTerm } from './pdf-templates.js';
 import { setupAuth, authMiddleware, requireAuth, authRoutes, publicMiddleware, PUBLIC_PATHS } from './auth.js';
 import { fetchCalendars } from './calendar.js';
@@ -1701,6 +1702,182 @@ app.get('/api/condo/payments', (req, res) => {
   const cid = requireCondo(req, res); if (!cid) return;
   const rows = db.prepare('SELECT * FROM condo_payments WHERE condo_id=? ORDER BY created_at DESC').all(cid);
   res.json(rows);
+});
+
+// ---------- REPASSE INTELIGENTE ----------
+db.exec(`CREATE TABLE IF NOT EXISTS repasse_sheets (
+  id TEXT PRIMARY KEY,
+  sheet_id TEXT NOT NULL,
+  sheet_url TEXT,
+  name TEXT,
+  created_at INTEGER DEFAULT (strftime('%s','now')*1000)
+);
+CREATE TABLE IF NOT EXISTS repasse_condos (
+  id TEXT PRIMARY KEY,
+  sheet_id TEXT,
+  gid TEXT,
+  tab_name TEXT,
+  internal_code TEXT,
+  condo_id TEXT REFERENCES condominiums(id) ON DELETE SET NULL,
+  model TEXT DEFAULT 'hibrido',
+  config TEXT,
+  last_import_at INTEGER,
+  UNIQUE(sheet_id, gid)
+);
+CREATE TABLE IF NOT EXISTS repasse_entries (
+  id TEXT PRIMARY KEY,
+  repasse_condo_id TEXT REFERENCES repasse_condos(id) ON DELETE CASCADE,
+  month TEXT,
+  cycles INTEGER,
+  gross REAL,
+  costs REAL,
+  repasse_bruto REAL,
+  imposto REAL,
+  repasse_liquido REAL,
+  liquido_lavandery REAL,
+  margem REAL,
+  raw_json TEXT,
+  issues TEXT,
+  created_at INTEGER DEFAULT (strftime('%s','now')*1000),
+  UNIQUE(repasse_condo_id, month)
+);
+CREATE INDEX IF NOT EXISTS idx_re_condo ON repasse_entries(repasse_condo_id);`);
+
+// Importa planilha: lista abas, classifica, retorna preview
+app.post('/api/repasse/inspect', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const url = req.body?.url;
+    const sheetId = extractSheetId(url);
+    if (!sheetId) return res.status(400).json({ error: 'invalid_url' });
+    const tabs = await listTabs(sheetId);
+    const forced = req.body?.forced_names || [];
+    const inspected = [];
+    for (const tab of tabs) {
+      try {
+        const csv = await fetchTabCsv(sheetId, tab.gid);
+        const rows = parseCsv(csv);
+        const cls = classifyTab(tab, rows, forced);
+        const parsed = cls.valid ? parseCondoTab(rows) : null;
+        inspected.push({
+          gid: tab.gid, name: tab.name,
+          valid: cls.valid, reason: cls.reason,
+          row_count: rows.length,
+          entries_detected: parsed?.rows?.length || 0,
+          detected_model: parsed?.rows?.length ? detectModel(parsed.rows) : null,
+          sample: parsed?.rows?.slice(0, 3) || [],
+        });
+        await new Promise(r => setTimeout(r, 80));
+      } catch (e) {
+        inspected.push({ gid: tab.gid, name: tab.name, valid: false, reason: 'fetch_error', error: String(e.message||e) });
+      }
+    }
+    res.json({ sheet_id: sheetId, tabs: inspected });
+  } catch (e) {
+    res.status(500).json({ error: 'inspect_failed', detail: String(e.message||e) });
+  }
+});
+
+// Processa: importa dados e calcula repasse pra cada aba válida
+app.post('/api/repasse/process', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { url, selections = [] } = req.body || {};
+  const sheetId = extractSheetId(url);
+  if (!sheetId) return res.status(400).json({ error: 'invalid_url' });
+  // Salva sheet
+  const sheetInternalId = 'rps_' + sheetId.slice(0, 20);
+  db.prepare('INSERT OR IGNORE INTO repasse_sheets (id,sheet_id,sheet_url) VALUES (?,?,?)').run(sheetInternalId, sheetId, url);
+
+  // Matcher nome → condo.id (fuzzy)
+  const condosDb = db.prepare('SELECT id, name FROM condominiums').all();
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  function matchCondo(tabName) {
+    const t = norm(tabName);
+    if (!t) return null;
+    let best = null, bestScore = 0;
+    for (const c of condosDb) {
+      const n = norm(c.name);
+      if (!n) continue;
+      if (t.includes(n) || n.includes(t)) {
+        const score = Math.min(t.length, n.length) / Math.max(t.length, n.length);
+        if (score > bestScore) { bestScore = score; best = c; }
+      }
+    }
+    return bestScore > 0.5 ? best : null;
+  }
+
+  const results = [];
+  const upCondo = db.prepare(`INSERT INTO repasse_condos (id,sheet_id,gid,tab_name,internal_code,condo_id,model,config,last_import_at)
+    VALUES (?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(sheet_id,gid) DO UPDATE SET tab_name=excluded.tab_name, condo_id=excluded.condo_id, model=excluded.model, config=excluded.config, last_import_at=excluded.last_import_at`);
+  const upEntry = db.prepare(`INSERT INTO repasse_entries
+    (id,repasse_condo_id,month,cycles,gross,costs,repasse_bruto,imposto,repasse_liquido,liquido_lavandery,margem,raw_json,issues)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(repasse_condo_id,month) DO UPDATE SET cycles=excluded.cycles, gross=excluded.gross, costs=excluded.costs,
+      repasse_bruto=excluded.repasse_bruto, imposto=excluded.imposto, repasse_liquido=excluded.repasse_liquido,
+      liquido_lavandery=excluded.liquido_lavandery, margem=excluded.margem, raw_json=excluded.raw_json, issues=excluded.issues`);
+
+  for (const sel of selections) {
+    try {
+      const csv = await fetchTabCsv(sheetId, sel.gid);
+      const rows = parseCsv(csv);
+      const parsed = parseCondoTab(rows);
+      if (!parsed.rows.length) { results.push({ gid: sel.gid, name: sel.name, ok: false, reason: 'no_data' }); continue; }
+      const matched = matchCondo(sel.name);
+      const internalCode = sel.internal_code || ('COND_' + String(results.length + 1).padStart(3,'0'));
+      const config = sel.config || {};
+      const model = sel.model || detectModel(parsed.rows);
+      const rpcId = 'rpc_' + sheetId.slice(0,10) + '_' + sel.gid;
+      upCondo.run(rpcId, sheetId, sel.gid, sel.name, internalCode, matched?.id || null, model, JSON.stringify(config), Date.now());
+
+      const entries = [];
+      for (const data of parsed.rows) {
+        const calc = calculateRepasse(data, { model, ...config });
+        const issues = validateCalc(calc);
+        const entId = 'rpe_' + rpcId + '_' + data.month;
+        upEntry.run(entId, rpcId, data.month, calc.cycles||0, calc.gross||0, calc.costs||0,
+          calc.repasse_bruto||0, calc.imposto||0, calc.repasse_liquido||0, calc.liquido_lavandery||0,
+          calc.margem||0, JSON.stringify(data), JSON.stringify(issues));
+        entries.push(calc);
+      }
+      // Sincroniza com condo_payments pro portal do condomínio
+      if (matched?.id) {
+        const ins = db.prepare('INSERT INTO condo_payments (id,condo_id,period,type,amount,note) VALUES (?,?,?,?,?,?)');
+        const existing = db.prepare('SELECT period FROM condo_payments WHERE condo_id=? AND type=?').all(matched.id, 'repasse');
+        const existSet = new Set(existing.map(e => e.period));
+        for (const e of entries) {
+          if (!existSet.has(e.month)) {
+            ins.run('pay_' + rpcId + '_' + e.month, matched.id, e.month, 'repasse', e.repasse_liquido || 0, `Ciclos: ${e.cycles} · Bruto: ${e.gross?.toFixed(2)} · Margem: ${e.margem}%`);
+          }
+        }
+      }
+      results.push({ gid: sel.gid, name: sel.name, ok: true, entries: entries.length, condo_id: matched?.id, model });
+      await new Promise(r => setTimeout(r, 120));
+    } catch (e) {
+      results.push({ gid: sel.gid, name: sel.name, ok: false, reason: 'process_error', error: String(e.message||e) });
+    }
+  }
+  res.json({ ok:true, sheet_id: sheetId, results });
+});
+
+// Lista condos processados + estatísticas
+app.get('/api/repasse/summary', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const rows = db.prepare(`SELECT rc.*, c.name as condo_name,
+    (SELECT COUNT(*) FROM repasse_entries WHERE repasse_condo_id=rc.id) as entries_count,
+    (SELECT SUM(repasse_liquido) FROM repasse_entries WHERE repasse_condo_id=rc.id) as total_repasse,
+    (SELECT SUM(liquido_lavandery) FROM repasse_entries WHERE repasse_condo_id=rc.id) as total_liquido,
+    (SELECT AVG(margem) FROM repasse_entries WHERE repasse_condo_id=rc.id) as avg_margem
+    FROM repasse_condos rc LEFT JOIN condominiums c ON c.id=rc.condo_id
+    ORDER BY rc.last_import_at DESC`).all();
+  res.json(rows);
+});
+
+// Detalhe de um condo — entradas mensais
+app.get('/api/repasse/:rcId/entries', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const rows = db.prepare('SELECT * FROM repasse_entries WHERE repasse_condo_id=? ORDER BY month').all(req.params.rcId);
+  res.json(rows.map(r => ({ ...r, raw: JSON.parse(r.raw_json||'null'), issues: JSON.parse(r.issues||'[]') })));
 });
 
 // Admin: listar/criar/atualizar pedidos e pagamentos

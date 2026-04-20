@@ -15,6 +15,7 @@ ENV NODE_ENV=production
 # Copy server + static files
 COPY --from=deps /app/server/node_modules /app/server/node_modules
 COPY server /app/server
+# server/repasse.js já incluso em COPY server
 COPY app.js /app/app.js
 COPY bubbles.js /app/bubbles.js
 COPY admin.html /app/admin.html

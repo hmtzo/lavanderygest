@@ -64,6 +64,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       Entrega de Equipamentos
     </a>
+    <a href="#" data-tab="repasse" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Repasse Inteligente
+    </a>
 
     <div class="sidebar-section">Cadastro</div>
     <a href="#" data-tab="condos" class="tab nav-item">
@@ -447,6 +451,39 @@
       <p><b>Microsoft Outlook / 365:</b> em Outlook web → Configurações → Calendário → Calendários compartilhados → Publicar um calendário → selecione permissão "Ver todos os detalhes" → copie o link <b>.ics</b>.</p>
       <p>Cole esses URLs (separados por vírgula) na aba <b>Integrações</b> → card "Agenda externa (iCal)" e clique em Salvar. Os eventos aparecem aqui automaticamente.</p>
     </div>
+  </section>
+</main>
+
+<main class="page hidden" id="repasseMain">
+  <div class="page-header">
+    <div class="page-title"><h1>Repasse Inteligente</h1><p>Cole o link do Google Sheets com os repasses — o sistema lê, classifica e calcula tudo.</p></div>
+  </div>
+
+  <section class="card-new" style="margin-bottom:16px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="rpsUrl" class="input" placeholder="https://docs.google.com/spreadsheets/d/..." style="flex:1;height:42px"/>
+      <button id="rpsInspectBtn" class="btn-new brand" style="white-space:nowrap">🔍 Inspecionar</button>
+    </div>
+    <p class="subtle" style="font-size:12px;margin-top:8px">A planilha precisa estar como "Qualquer pessoa com o link pode ler".</p>
+  </section>
+
+  <section class="card-new" id="rpsTabsCard" style="margin-bottom:16px;display:none">
+    <div class="card-header"><div><div class="card-title">Abas detectadas</div><div class="subtle" style="font-size:12px" id="rpsTabsStats"></div></div></div>
+    <div id="rpsTabsList" style="max-height:420px;overflow-y:auto"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:10px;flex-wrap:wrap">
+      <label style="font-size:12px;color:var(--ink-600)"><input type="checkbox" id="rpsSelectAll" checked/> Selecionar todas válidas</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <select id="rpsModel" class="input" style="height:36px;padding:0 12px"><option value="auto">Auto-detectar</option><option value="percentual">Percentual</option><option value="fixo">Fixo por ciclo</option><option value="hibrido">Híbrido (líquido × %)</option></select>
+        <input id="rpsPercent" class="input" placeholder="%" type="number" step="0.1" style="width:80px;height:36px"/>
+        <input id="rpsFixed" class="input" placeholder="R$/ciclo" type="number" step="0.01" style="width:100px;height:36px"/>
+        <button id="rpsProcessBtn" class="btn-new brand">⚙️ Processar e importar</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card-new" id="rpsResultsCard" style="display:none">
+    <div class="card-header"><div class="card-title">Relatório por condomínio</div></div>
+    <div id="rpsSummary"></div>
   </section>
 </main>
 
@@ -1966,7 +2003,7 @@ async function initGlobe() {
 // globo removido
 
 // ---------- Tabs ----------
-const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos' };
+const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos', repasse:'Repasse Inteligente' };
 function showTab(tab) {
   document.querySelectorAll('.tab').forEach(a => a.classList.toggle('active', a.dataset.tab===tab));
   const crumb = document.querySelector('#crumbTitle');
@@ -1979,6 +2016,8 @@ function showTab(tab) {
   document.querySelector('#historyMain')?.classList.toggle('hidden', tab!=='history');
   document.querySelector('#implantationsMain')?.classList.toggle('hidden', tab!=='implantations');
   document.querySelector('#deliveriesMain')?.classList.toggle('hidden', tab!=='deliveries');
+  document.querySelector('#repasseMain')?.classList.toggle('hidden', tab!=='repasse');
+  if (tab === 'repasse') loadRepasseSummary();
   document.querySelector('#calendarMain')?.classList.toggle('hidden', tab!=='calendar');
   if (tab === 'implantations') loadImplantations();
   if (tab === 'deliveries') loadDeliveries();
@@ -1994,6 +2033,91 @@ function showTab(tab) {
   if (tab === 'tickets') loadTickets();
   if (tab === 'history') loadHistory();
   if (tab === 'integrations') { loadIntegrations(); startWaPoll(); } else { stopWaPoll?.(); }
+}
+
+// ---------- REPASSE INTELIGENTE ----------
+let _rpsInspected = null;
+document.querySelector('#rpsInspectBtn')?.addEventListener('click', async () => {
+  const url = document.querySelector('#rpsUrl').value.trim();
+  if (!url) { Toast.warning('Cole o link da planilha'); return; }
+  const btn = document.querySelector('#rpsInspectBtn');
+  const orig = btn.textContent; btn.textContent = 'Lendo...'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/repasse/inspect', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || d.error);
+    _rpsInspected = d;
+    renderRpsTabs(d.tabs);
+    Toast.success(`${d.tabs.filter(t=>t.valid).length} abas válidas de ${d.tabs.length} detectadas`);
+  } catch (e) { Toast.error('Erro: ' + e.message); }
+  btn.textContent = orig; btn.disabled = false;
+});
+function renderRpsTabs(tabs) {
+  const host = document.querySelector('#rpsTabsList');
+  const card = document.querySelector('#rpsTabsCard');
+  document.querySelector('#rpsTabsStats').textContent = `${tabs.filter(t=>t.valid).length} válidas · ${tabs.filter(t=>!t.valid).length} ignoradas · ${tabs.length} total`;
+  host.innerHTML = tabs.map(t => `
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--ink-100);cursor:${t.valid?'pointer':'default'};${!t.valid?'opacity:.55':''}">
+      <input type="checkbox" class="rpsTabChk" data-gid="${t.gid}" data-name="${esc(t.name)}" ${t.valid?'checked':''} ${t.valid?'':'disabled'}/>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;font-size:13px;color:var(--ink-900)">${esc(t.name)}</div>
+        <div style="font-size:11px;color:var(--ink-500)">${t.valid ? `✓ ${t.reason} · ${t.entries_detected} meses · modelo detectado: ${t.detected_model || '—'}` : `✗ ${t.reason}`}</div>
+      </div>
+      ${t.valid ? `<span class="pill brand" style="font-size:10px">${t.entries_detected}m</span>` : ''}
+    </label>
+  `).join('');
+  card.style.display = '';
+}
+document.querySelector('#rpsSelectAll')?.addEventListener('change', (e) => {
+  document.querySelectorAll('.rpsTabChk:not(:disabled)').forEach(c => c.checked = e.target.checked);
+});
+document.querySelector('#rpsProcessBtn')?.addEventListener('click', async () => {
+  if (!_rpsInspected) return;
+  const selected = Array.from(document.querySelectorAll('.rpsTabChk:checked')).map(c => ({ gid: c.dataset.gid, name: c.dataset.name }));
+  if (!selected.length) { Toast.warning('Selecione ao menos uma aba'); return; }
+  const model = document.querySelector('#rpsModel').value;
+  const percent = parseFloat(document.querySelector('#rpsPercent').value) || 0;
+  const fixed = parseFloat(document.querySelector('#rpsFixed').value) || 0;
+  const selections = selected.map(s => ({ ...s, model: model==='auto'?null:model, config: { percent, fixedPerCycle: fixed } }));
+  const btn = document.querySelector('#rpsProcessBtn');
+  const orig = btn.textContent; btn.textContent = 'Processando...'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/repasse/process', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: document.querySelector('#rpsUrl').value.trim(), selections }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail||d.error);
+    const okCount = d.results.filter(r => r.ok).length;
+    Toast.success(`${okCount}/${d.results.length} condomínios processados`);
+    loadRpsSummary();
+  } catch (e) { Toast.error('Erro: ' + e.message); }
+  btn.textContent = orig; btn.disabled = false;
+});
+async function loadRepasseSummary() { return loadRpsSummary(); }
+async function loadRpsSummary() {
+  try {
+    const rows = await fetch('/api/repasse/summary').then(r => r.ok ? r.json() : []);
+    if (!rows.length) { document.querySelector('#rpsResultsCard').style.display='none'; return; }
+    document.querySelector('#rpsResultsCard').style.display = '';
+    const fmt = n => 'R$ ' + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.querySelector('#rpsSummary').innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead style="background:var(--ink-50)"><tr>
+          <th style="text-align:left;padding:10px 12px">Condomínio</th>
+          <th style="text-align:left;padding:10px 12px">Modelo</th>
+          <th style="text-align:right;padding:10px 12px">Meses</th>
+          <th style="text-align:right;padding:10px 12px">Repasse total</th>
+          <th style="text-align:right;padding:10px 12px">Líquido Lavandery</th>
+          <th style="text-align:right;padding:10px 12px">Margem</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--ink-100)">
+          <td style="padding:10px 12px"><b>${esc(r.tab_name)}</b>${r.condo_name ? `<div style="font-size:11px;color:var(--ink-500)">→ ${esc(r.condo_name)}</div>` : `<div style="font-size:11px;color:#e84855">⚠ sem vínculo</div>`}</td>
+          <td style="padding:10px 12px"><span class="pill">${r.model}</span></td>
+          <td style="padding:10px 12px;text-align:right">${r.entries_count||0}</td>
+          <td style="padding:10px 12px;text-align:right">${fmt(r.total_repasse)}</td>
+          <td style="padding:10px 12px;text-align:right">${fmt(r.total_liquido)}</td>
+          <td style="padding:10px 12px;text-align:right">${(r.avg_margem||0).toFixed(1)}%</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+  } catch {}
 }
 
 // ---------- Integrations ----------
