@@ -186,10 +186,11 @@ document.querySelectorAll('.sidebar-link[data-view]').forEach(a => {
 // ---------- DASHBOARD ----------
 let _dashData = null;
 async function loadDashboard() {
-  const [condos] = await Promise.all([fetch('/api/condominiums').then(r=>r.ok?r.json():[])]);
-  // Fetch repasses de cada condo
-  const allRepasses = await Promise.all(condos.map(c => fetch('/api/condominiums/'+c.id+'/repasse').then(r=>r.ok?r.json():[]).catch(()=>[])));
-  _dashData = { condos, flat: allRepasses.flat() };
+  const [condos, allRepasses] = await Promise.all([
+    fetch('/api/condominiums').then(r => r.ok?r.json():[]),
+    fetch('/api/repasses/all').then(r => r.ok?r.json():[]).catch(()=>[]),
+  ]);
+  _dashData = { condos, flat: allRepasses };
   // Anos disponíveis
   const years = [...new Set(_dashData.flat.map(r => (r.month||'').slice(0,4)))].filter(Boolean).sort().reverse();
   const cur = String(new Date().getFullYear());
@@ -358,12 +359,15 @@ document.querySelector('#downloadSample')?.addEventListener('click', (e) => {
 // ---------- CONDOS VIEW ----------
 let _cView = [];
 async function loadCondosView() {
-  _cView = await fetch('/api/condominiums').then(r => r.ok?r.json():[]);
-  _cView.sort((a,b) => (a.contract_name||a.name||'').localeCompare(b.contract_name||b.name||''));
-  // YTD por condo
   const year = String(new Date().getFullYear());
-  const results = await Promise.all(_cView.map(c => fetch('/api/condominiums/'+c.id+'/repasse').then(r=>r.ok?r.json():[]).then(arr => arr.filter(x=>(x.month||'').startsWith(year)).reduce((s,x)=>s+(x.repasse_liquido||0),0)).catch(()=>0)));
-  _cView.forEach((c,i) => c._ytd = results[i]);
+  const [condos, reps] = await Promise.all([
+    fetch('/api/condominiums').then(r => r.ok?r.json():[]),
+    fetch('/api/repasses/all?year='+year).then(r => r.ok?r.json():[]).catch(()=>[]),
+  ]);
+  _cView = condos.sort((a,b) => (a.contract_name||a.name||'').localeCompare(b.contract_name||b.name||''));
+  const ytdByCondo = {};
+  for (const r of reps) { ytdByCondo[r.condo_id] = (ytdByCondo[r.condo_id]||0) + (r.repasse_liquido||0); }
+  _cView.forEach(c => c._ytd = ytdByCondo[c.id] || 0);
   renderCondosView();
 }
 function renderCondosView(filter='') {

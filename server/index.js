@@ -1733,6 +1733,20 @@ app.get('/api/condominiums/:id/repasse', (req, res) => {
   const rows = db.prepare('SELECT * FROM condo_repasse WHERE condo_id=? ORDER BY month DESC').all(req.params.id);
   res.json(rows);
 });
+
+// Endpoint consolidado: TODOS os repasses de TODOS os condos em uma chamada
+app.get('/api/repasses/all', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const year = req.query.year;
+  let sql = `SELECT cr.*, c.name as condo_name
+    FROM condo_repasse cr
+    LEFT JOIN condominiums c ON c.id=cr.condo_id`;
+  const args = [];
+  if (year) { sql += ` WHERE cr.month LIKE ?`; args.push(year+'%'); }
+  sql += ` ORDER BY cr.month DESC`;
+  const rows = db.prepare(sql).all(...args);
+  res.json(rows);
+});
 app.post('/api/condominiums/:id/repasse', (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
   const b = req.body || {};
