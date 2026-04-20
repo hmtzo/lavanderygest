@@ -2131,36 +2131,50 @@ function renderMonthTable(filter='') {
   const f = (filter||'').toLowerCase();
   const list = _condosCache.filter(c => !f || (c.name||'').toLowerCase().includes(f));
   host.innerHTML = `
-    <div style="display:grid;grid-template-columns:1.8fr 90px 90px 110px 130px;gap:6px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--ink-200);position:sticky;top:0;background:#fff;z-index:1">
-      <div>Condomínio</div><div>Lavagens</div><div>Secagens</div><div>Ciclos × R$</div><div style="text-align:right">Repasse líquido</div>
+    <div style="display:grid;grid-template-columns:1.6fr 80px 80px 110px 120px 140px;gap:6px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--ink-500);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ink-200);position:sticky;top:0;background:#fff;z-index:1">
+      <div>Condomínio</div>
+      <div>Lavagens</div><div>Secagens</div>
+      <div title="Preço cobrado do usuário × ciclos">Receita máquina</div>
+      <div title="Repasse/ciclo × ciclos">Repasse bruto</div>
+      <div style="text-align:right">Repasse líquido</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr;gap:3px;margin-top:4px">
       ${list.map(c => {
         const rate = c.cycle_rate;
+        const price = c.cycle_price;
         const tax = (c.tax_rate || 0) / 100;
+        const hasConfig = !!rate;
         return `
-        <div class="rp-month-row" data-id="${c.id}" data-rate="${rate||0}" data-tax="${tax}" style="display:grid;grid-template-columns:1.8fr 90px 90px 110px 130px;gap:6px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.5);border-radius:6px;${!rate?'opacity:.55':''}">
-          <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.name)}">${esc(c.name)}${!rate?' <span style="color:#e84855;font-size:11px">⚠ sem repasse</span>':''}</div>
-          <input class="input rp-mt-w" type="number" min="0" placeholder="0" style="height:32px;font-size:13px" ${!rate?'disabled':''}/>
-          <input class="input rp-mt-d" type="number" min="0" placeholder="0" style="height:32px;font-size:13px" ${!rate?'disabled':''}/>
-          <div style="font-size:12px;color:var(--ink-600)" class="rp-mt-formula">${rate?`× ${_moneyBR(rate)}`:'—'}</div>
+        <div class="rp-month-row" data-id="${c.id}" data-rate="${rate||0}" data-price="${price||0}" data-tax="${tax}" style="display:grid;grid-template-columns:1.6fr 80px 80px 110px 120px 140px;gap:6px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.5);border-radius:6px;${!hasConfig?'opacity:.55':''}">
+          <div style="font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" title="${esc(c.name)}${rate?` · Repasse R$ ${rate.toFixed(2)}/ciclo`:''}${price?` · Máquina R$ ${price.toFixed(2)}/ciclo`:''}">
+            <div style="overflow:hidden;text-overflow:ellipsis">${esc(c.name)}${!hasConfig?' <span style="color:#e84855;font-size:11px">⚠ sem repasse</span>':''}</div>
+            <div style="font-size:10px;color:var(--ink-500)">${price?`máq R$ ${price.toFixed(2)}`:'—'} · ${rate?`rep R$ ${rate.toFixed(2)}`:'—'} · imp ${c.tax_rate||0}%</div>
+          </div>
+          <input class="input rp-mt-w" type="number" min="0" placeholder="0" style="height:32px;font-size:13px" ${!hasConfig?'disabled':''}/>
+          <input class="input rp-mt-d" type="number" min="0" placeholder="0" style="height:32px;font-size:13px" ${!hasConfig?'disabled':''}/>
+          <div style="font-size:12px;color:var(--ink-700)" class="rp-mt-receita">—</div>
+          <div style="font-size:12px;color:var(--ink-700)" class="rp-mt-bruto">—</div>
           <div style="font-size:13px;font-weight:600;text-align:right;color:var(--brand-700)" class="rp-mt-liq">${_moneyBR(0)}</div>
         </div>`;
       }).join('')}
     </div>`;
   host.querySelectorAll('.rp-month-row').forEach(row => {
     const rate = parseFloat(row.dataset.rate) || 0;
+    const price = parseFloat(row.dataset.price) || 0;
     const tax = parseFloat(row.dataset.tax) || 0;
     const wIn = row.querySelector('.rp-mt-w');
     const dIn = row.querySelector('.rp-mt-d');
-    const cyclesBox = row.querySelector('.rp-mt-formula');
+    const receitaBox = row.querySelector('.rp-mt-receita');
+    const brutoBox = row.querySelector('.rp-mt-bruto');
     const liqBox = row.querySelector('.rp-mt-liq');
     const recalc = () => {
       const w = parseInt(wIn.value) || 0, d = parseInt(dIn.value) || 0;
       const cycles = w + d;
+      const receita = cycles * price;
       const bruto = cycles * rate;
       const liq = bruto * (1 - tax);
-      cyclesBox.textContent = cycles ? `${cycles} × ${_moneyBR(rate)}` : `× ${_moneyBR(rate)}`;
+      receitaBox.textContent = price ? _moneyBR(receita) : '—';
+      brutoBox.textContent = rate ? _moneyBR(bruto) : '—';
       liqBox.textContent = _moneyBR(liq);
       updateTotalPreview();
     };
