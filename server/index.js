@@ -2138,7 +2138,7 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
   try {
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-    const W = 595, H = 842;
+    const W = 595, H = 842, pad = 40;
     const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
     const num = n => (+n||0).toLocaleString('pt-BR');
     const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -2167,7 +2167,6 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     // Circle pattern decorativo
     doc.setFillColor(...BRAND_LIGHT); doc.circle(W-60, 120, 140, 'F');
     doc.setFillColor(...BRAND); doc.circle(W-60, 120, 140, 'F');
-    doc.setFillColor(168, 134, 235, 'F');
 
     // LAVANDERY logo text
     doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(28);
@@ -2283,7 +2282,7 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     // Card Secagens
     doc.setFillColor(255,255,255); doc.roundedRect(50 + cardW, yy, cardW, 100, 12, 12, 'F');
     doc.setFillColor(...BRAND_LIGHT); doc.roundedRect(50 + cardW, yy, cardW, 4, 2, 2, 'F');
-    doc.setTextColor(...BRAND_LIGHT[0], BRAND_LIGHT[1], BRAND_LIGHT[2]); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.setTextColor(BRAND_LIGHT[0], BRAND_LIGHT[1], BRAND_LIGHT[2]); doc.setFont('helvetica','bold'); doc.setFontSize(10);
     doc.text('🌀 SECAGENS', 66 + cardW, yy + 28);
     doc.setTextColor(...INK); doc.setFontSize(32);
     doc.text(num(r.dries||0), 66 + cardW, yy + 62);
