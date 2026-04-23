@@ -63,34 +63,34 @@ async function fetchAllPaginated(cfg, endpoint, pageSize = 100) {
   return all;
 }
 
-// Busca todos os registros via POST /search (Moskit v2 pagina via nextPageToken no body)
+// Busca todos os registros via POST /search com diferentes estratégias de paginação
 async function searchAll(cfg, baseEndpoint) {
   const allMap = new Map();
-  let pageToken = null;
+  // Moskit v2: POST /endpoint/search com body { page: N, pageSize: X } ou paginação via query
   const MAX_PAGES = 200;
-  for (let i = 0; i < MAX_PAGES; i++) {
-    const body = {};
-    if (pageToken) body.pageToken = pageToken;
+  // Estratégia 1: page=N no body
+  let lastPageCount = -1;
+  for (let page = 1; page <= MAX_PAGES; page++) {
     let r;
     try {
-      r = await moskitFetch(cfg, `${baseEndpoint}/search`, {
+      r = await moskitFetch(cfg, `${baseEndpoint}/search?page=${page}&pageSize=100`, {
         method: 'POST',
-        body: JSON.stringify(body),
+        body: JSON.stringify({ page, pageSize: 100 }),
       });
-    } catch (e) { break; }
-    // Respostas possíveis: { data: [...], nextPageToken } ou array direto
+    } catch { break; }
     const items = Array.isArray(r) ? r : (r?.data || r?.items || r?.results || []);
     if (!Array.isArray(items) || items.length === 0) break;
-    // Filtra metadata (campos que têm estrutura schema)
     const realItems = items.filter(x => x && typeof x === 'object' && x.id != null);
+    let added = 0;
     for (const item of realItems) {
-      allMap.set(item.id, item);
+      if (!allMap.has(item.id)) { allMap.set(item.id, item); added++; }
     }
-    pageToken = r?.nextPageToken || r?.next_page_token || r?.pageToken;
-    if (!pageToken) break;
+    // Se página retornou só IDs já vistos, acabou
+    if (added === 0) break;
+    // Se retornou menos que pageSize, provavelmente última página
+    if (realItems.length < 10) break;
     await new Promise(res => setTimeout(res, 150));
   }
-  // Fallback: GET /endpoint se POST não retornou nada
   if (allMap.size === 0) {
     const fallback = await moskitFetch(cfg, baseEndpoint).catch(() => []);
     if (Array.isArray(fallback)) for (const it of fallback) if (it?.id) allMap.set(it.id, it);
