@@ -4149,6 +4149,35 @@ app.post('/api/integrations/moskit/test', async (_req, res) => {
   res.json(r);
 });
 
+// DEBUG: testa paginação real da API do Moskit
+app.get('/api/moskit/debug-pagination', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const cfg = getIntegration('moskit');
+  if (!cfg?.api_key) return res.status(400).json({ error:'no_api_key' });
+  const endpoint = req.query.endpoint || '/companies';
+  const out = [];
+  for (const testUrl of [
+    `${endpoint}?page=1&limit=100`,
+    `${endpoint}?page=2&limit=100`,
+    `${endpoint}?offset=0&limit=100`,
+    `${endpoint}?offset=10&limit=10`,
+    `${endpoint}?limit=50`,
+    `${endpoint}`,
+  ]) {
+    try {
+      const r = await fetch(`https://api.moskitcrm.com/v2${testUrl}`, { headers: { 'apikey': cfg.api_key, 'Accept': 'application/json' } });
+      const text = await r.text();
+      let body;
+      try { body = JSON.parse(text); } catch { body = text.slice(0,200); }
+      const count = Array.isArray(body) ? body.length : (body?.data ? body.data.length : 'N/A');
+      const firstId = Array.isArray(body) && body[0] ? body[0].id : (body?.data?.[0]?.id || null);
+      out.push({ url: testUrl, status: r.status, count, firstId, headers: { link: r.headers.get('link'), total: r.headers.get('x-total-count') } });
+    } catch (e) { out.push({ url: testUrl, error: String(e.message||e) }); }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  res.json(out);
+});
+
 // Força sincronização manual
 app.post('/api/moskit/refresh', async (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
