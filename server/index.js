@@ -1281,8 +1281,113 @@ app.post('/api/tickets', (req,res) => {
   );
   emitEvent('ticket.created', { id, condo_id, title, priority, category }).catch(()=>{});
   notifyTicketOpened(id).catch(()=>{});
+  forwardTicketToExternal(id).catch(()=>{});
   res.json({ ok:true, id });
 });
+
+// OUTBOUND WEBHOOK — dispara POST pro sistema externo (Octadesk, Zendesk, etc)
+async function forwardTicketToExternal(ticketId) {
+  const cfg = getIntegration('external_helpdesk');
+  if (!cfg?.webhook_url) return;
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) return;
+  const condo = db.prepare('SELECT name, address, city, cep, cnpj, contact_email FROM condominiums WHERE id=?').get(t.condo_id);
+
+  // Formato genérico — adaptável por provedor via cfg.format
+  const format = cfg.format || 'generic';
+  let payload;
+  if (format === 'zendesk') {
+    payload = {
+      ticket: {
+        subject: t.title,
+        comment: { body: (t.description || '') + `\n\nCondomínio: ${condo?.name || '—'}\nCategoria: ${t.category}\nPrioridade: ${t.priority}\nAberto por: ${t.opened_by_name || '—'} (${t.opened_by_email || '—'})` },
+        priority: t.priority === 'urgente' ? 'urgent' : t.priority === 'alta' ? 'high' : t.priority === 'baixa' ? 'low' : 'normal',
+        requester: { name: t.opened_by_name || condo?.name || 'Condomínio', email: t.opened_by_email || condo?.contact_email },
+        tags: ['lavandery', t.category || 'outro', condo?.name?.toLowerCase().replace(/\s/g,'_') || ''],
+      }
+    };
+  } else if (format === 'octadesk') {
+    payload = {
+      subject: t.title,
+      content: t.description,
+      priority: t.priority,
+      category: t.category,
+      customer: { name: t.opened_by_name, email: t.opened_by_email, phone: t.opened_by_phone },
+      custom_fields: { condominio: condo?.name, condo_id: t.condo_id, lavandery_ticket_id: t.id },
+      channel: 'api',
+      origin: 'Lavandery',
+    };
+  } else if (format === 'freshdesk') {
+    payload = {
+      subject: t.title,
+      description: (t.description || '') + `\n\n<br><strong>Condomínio:</strong> ${condo?.name || '—'}`,
+      email: t.opened_by_email || condo?.contact_email || 'noreply@lavandery.com.br',
+      name: t.opened_by_name || condo?.name || 'Lavandery',
+      priority: t.priority === 'urgente' ? 4 : t.priority === 'alta' ? 3 : t.priority === 'baixa' ? 1 : 2,
+      status: 2,
+      source: 7, // Feedback widget
+      tags: ['lavandery', t.category || ''],
+      custom_fields: { cf_condominio: condo?.name, cf_condo_id: t.condo_id },
+    };
+  } else if (format === 'huggy') {
+    payload = {
+      contact: { name: t.opened_by_name || condo?.name, email: t.opened_by_email, mobile: t.opened_by_phone },
+      ticket: {
+        subject: t.title,
+        message: t.description,
+        department_id: cfg.department_id || null,
+      },
+    };
+  } else if (format === 'hubspot') {
+    payload = {
+      properties: {
+        subject: t.title,
+        content: t.description,
+        hs_pipeline: cfg.pipeline_id || '0',
+        hs_pipeline_stage: cfg.stage_id || '1',
+        hs_ticket_priority: t.priority === 'urgente' ? 'HIGH' : t.priority === 'alta' ? 'HIGH' : 'MEDIUM',
+        hubspot_owner_id: cfg.owner_id,
+      }
+    };
+  } else {
+    // Generic — payload completo
+    payload = {
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      category: t.category,
+      priority: t.priority,
+      status: t.status,
+      created_at: t.created_at,
+      opened_by: { name: t.opened_by_name, email: t.opened_by_email, phone: t.opened_by_phone },
+      condo: condo,
+      condo_id: t.condo_id,
+      source: 'lavandery',
+      source_url: `https://lavandery.onrender.com/admin.html#tickets?id=${t.id}`,
+    };
+  }
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (cfg.auth_header) headers['Authorization'] = cfg.auth_header;
+  if (cfg.api_key) headers[cfg.api_key_header || 'X-API-Key'] = cfg.api_key;
+  if (cfg.extra_headers) {
+    try { Object.assign(headers, JSON.parse(cfg.extra_headers)); } catch {}
+  }
+
+  try {
+    const r = await fetch(cfg.webhook_url, { method: 'POST', headers, body: JSON.stringify(payload) });
+    const responseText = await r.text().catch(() => '');
+    console.log('[external-helpdesk] ticket', ticketId, '→', r.status, responseText.slice(0,120));
+    // Registra em webhook_events
+    try {
+      db.prepare(`INSERT OR IGNORE INTO webhook_events (id, subscription_id, topic, payload, status, attempt, response_status, response_body, sent_at)
+        VALUES (?, 'external_helpdesk', 'ticket.created', ?, ?, 1, ?, ?, ?)`)
+        .run('ext_' + Math.random().toString(36).slice(2,10), JSON.stringify(payload), r.ok ? 'ok' : 'failed', r.status, responseText.slice(0,500), Date.now());
+    } catch {}
+  } catch (e) {
+    console.error('[external-helpdesk] falhou:', e.message);
+  }
+}
 
 // Envia notificação quando um chamado é aberto (admin + condomínio)
 async function notifyTicketOpened(ticketId) {
@@ -2892,6 +2997,8 @@ app.post('/api/condo/tickets', (req, res) => {
       }
     }
   }
+  notifyTicketOpened(id).catch(()=>{});
+  forwardTicketToExternal(id).catch(()=>{});
   res.json({ ok:true, id });
 });
 
@@ -4214,6 +4321,34 @@ app.post('/api/integrations/moskit/test', async (_req, res) => {
   res.json(r);
 });
 
+// Testa webhook externo de helpdesk (envia ticket fake)
+app.post('/api/integrations/external_helpdesk/test', async (req, res) => {
+  const cfg = getIntegration('external_helpdesk');
+  if (!cfg?.webhook_url) return res.json({ ok: false, reason: 'no_webhook_url' });
+  // Cria ticket de teste temporário (não salva no banco)
+  const payload = {
+    id: 'test_' + Date.now(),
+    title: '🧪 Teste de integração Lavandery',
+    description: 'Esse é um chamado de teste enviado pelo painel Lavandery pra validar o webhook.',
+    category: 'outro', priority: 'media',
+    created_at: Date.now(),
+    opened_by: { name: 'Teste Lavandery', email: 'teste@lavandery.com.br', phone: '' },
+    condo: { name: 'Condomínio Teste', address: 'Rua Teste, 0' },
+    source: 'lavandery-test',
+  };
+  const headers = { 'Content-Type': 'application/json' };
+  if (cfg.auth_header) headers['Authorization'] = cfg.auth_header;
+  if (cfg.api_key) headers[cfg.api_key_header || 'X-API-Key'] = cfg.api_key;
+  if (cfg.extra_headers) { try { Object.assign(headers, JSON.parse(cfg.extra_headers)); } catch {} }
+  try {
+    const r = await fetch(cfg.webhook_url, { method: 'POST', headers, body: JSON.stringify(payload) });
+    const text = await r.text().catch(() => '');
+    res.json({ ok: r.ok, status: r.status, response: text.slice(0,300) });
+  } catch (e) {
+    res.json({ ok: false, error: String(e.message||e) });
+  }
+});
+
 // DEBUG 2: testa POST /search com bodies variados
 app.get('/api/moskit/debug-search-body', async (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
@@ -4489,6 +4624,8 @@ app.post('/api/v1/tickets', requireBearer, async (req, res) => {
   db.prepare(`INSERT INTO tickets (id,condo_id,title,description,category,priority,opened_by_name,opened_by_email,opened_by_phone)
               VALUES (?,?,?,?,?,?,?,?,?)`).run(id, condo_id, title, description||null, category||'outro', priority||'media', opened_by_name||null, opened_by_email||null, opened_by_phone||null);
   emitEvent('ticket.created', { id, condo_id, title }).catch(()=>{});
+  notifyTicketOpened(id).catch(()=>{});
+  forwardTicketToExternal(id).catch(()=>{});
   res.json({ ok: true, id });
 });
 app.get('/api/v1/schedule', requireBearer, (req, res) => {

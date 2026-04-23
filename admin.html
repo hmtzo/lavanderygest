@@ -1013,6 +1013,32 @@
       <p class="text-xs text-gray-500 mt-2">💡 Ao finalizar uma visita, as fotos são enviadas para essa pasta. O link público (qualquer pessoa com o link) é salvo junto com a visita e aparece no relatório PDF.</p>
     </div>
 
+    <div class="card" style="border-left:3px solid var(--brand-700)">
+      <div class="font-semibold mb-2">🎫 Helpdesk externo (webhook)</div>
+      <p class="text-xs text-gray-500 mb-3">Todo chamado criado no Lavandery é enviado automaticamente pra sua dashboard externa via POST JSON.</p>
+      <div class="grid grid-cols-1 gap-2">
+        <input class="input py-2" data-int="external_helpdesk" data-k="webhook_url" placeholder="https://seu-helpdesk.com/api/tickets"/>
+        <div class="grid grid-cols-2 gap-2">
+          <select class="select py-2" data-int="external_helpdesk" data-k="format">
+            <option value="generic">Formato genérico (JSON completo)</option>
+            <option value="zendesk">Zendesk</option>
+            <option value="octadesk">Octadesk</option>
+            <option value="freshdesk">Freshdesk</option>
+            <option value="huggy">Huggy</option>
+            <option value="hubspot">HubSpot Service</option>
+          </select>
+          <input class="input py-2" data-int="external_helpdesk" data-k="api_key" placeholder="API Key (opcional)" type="password"/>
+        </div>
+        <input class="input py-2" data-int="external_helpdesk" data-k="api_key_header" placeholder="Header da chave (padrão: X-API-Key)"/>
+        <input class="input py-2" data-int="external_helpdesk" data-k="auth_header" placeholder="Authorization header completo (ex: Bearer xxx — opcional)"/>
+      </div>
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="chip intTest" data-int="external_helpdesk">Testar</button>
+        <button class="btn btn-primary intSave" data-int="external_helpdesk" style="width:auto;padding:0 20px">Salvar</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">💡 O teste envia um chamado fake. Se o status for 2xx, a integração está ativa.</p>
+    </div>
+
     <div class="card">
       <div class="font-semibold mb-2">🧲 Moskit CRM</div>
       <p class="text-xs text-gray-500 mb-3">Sincroniza condomínios como empresas + envia chamados como atividades. Cole a sua API key do Moskit abaixo.</p>
