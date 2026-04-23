@@ -63,26 +63,39 @@ async function fetchAllPaginated(cfg, endpoint, pageSize = 100) {
   return all;
 }
 
-// Busca todos via endpoint /search (que retorna mais que o /list limitado a 10)
+// Busca todos os registros via POST /search (Moskit v2 pagina via nextPageToken no body)
 async function searchAll(cfg, baseEndpoint) {
   const allMap = new Map();
-  // Tenta várias estratégias de paginação do search
-  for (const qs of ['?pageSize=500', '?pageSize=100&pageToken=', '?limit=500', '']) {
+  let pageToken = null;
+  const MAX_PAGES = 200;
+  for (let i = 0; i < MAX_PAGES; i++) {
+    const body = {};
+    if (pageToken) body.pageToken = pageToken;
+    let r;
     try {
-      const r = await moskitFetch(cfg, `${baseEndpoint}/search${qs}`);
-      if (Array.isArray(r)) {
-        for (const item of r) {
-          const id = item.id || item.hash || JSON.stringify(item).slice(0,40);
-          allMap.set(id, item);
-        }
-      }
-    } catch {}
-    await new Promise(r => setTimeout(r, 150));
+      r = await moskitFetch(cfg, `${baseEndpoint}/search`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    } catch (e) { break; }
+    // Respostas possíveis: { data: [...], nextPageToken } ou array direto
+    const items = Array.isArray(r) ? r : (r?.data || r?.items || r?.results || []);
+    if (!Array.isArray(items) || items.length === 0) break;
+    // Filtra metadata (campos que têm estrutura schema)
+    const realItems = items.filter(x => x && typeof x === 'object' && x.id != null);
+    for (const item of realItems) {
+      allMap.set(item.id, item);
+    }
+    pageToken = r?.nextPageToken || r?.next_page_token || r?.pageToken;
+    if (!pageToken) break;
+    await new Promise(res => setTimeout(res, 150));
   }
-  // Se search retornou alguma coisa, usa isso. Se não, fallback pro endpoint normal
-  if (allMap.size > 0) return [...allMap.values()];
-  const fallback = await moskitFetch(cfg, baseEndpoint).catch(() => []);
-  return Array.isArray(fallback) ? fallback : [];
+  // Fallback: GET /endpoint se POST não retornou nada
+  if (allMap.size === 0) {
+    const fallback = await moskitFetch(cfg, baseEndpoint).catch(() => []);
+    if (Array.isArray(fallback)) for (const it of fallback) if (it?.id) allMap.set(it.id, it);
+  }
+  return [...allMap.values()];
 }
 
 // Lista empresas (companies) — usa /companies/search paginado
