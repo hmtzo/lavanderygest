@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Pesquisa de Satisfação · Lavandery</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(135deg, #FAF7FF 0%, #EDE5FF 100%); }
+  .card { width: min(540px, 100%); background: rgba(255,255,255,.92); backdrop-filter: blur(14px); border-radius: 24px; padding: 40px 32px; box-shadow: 0 30px 60px -20px rgba(83,60,157,.2); text-align: center; }
+  .logo { height: 50px; margin: 0 auto 20px; display: block; }
+  h1 { font-size: 26px; font-weight: 700; color: #1F1A33; letter-spacing: -.02em; margin-bottom: 6px; background: linear-gradient(135deg,#2E2165,#7B5FC7); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p.sub { color: #8B85A1; font-size: 14px; margin-bottom: 22px; }
+  .condo { background: rgba(123,95,199,.08); border: 1px solid rgba(123,95,199,.18); padding: 10px 16px; border-radius: 999px; display: inline-block; font-size: 13px; font-weight: 600; color: #533C9D; margin-bottom: 24px; }
+  .q { font-size: 16px; font-weight: 600; color: #1F1A33; margin-bottom: 18px; line-height: 1.4; }
+  .score { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; margin-bottom: 8px; }
+  .score button { height: 44px; border: 1.5px solid #E8E5EE; background: white; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all .15s; color: #4B4458; font-family: inherit; }
+  .score button:hover { border-color: #7B5FC7; transform: translateY(-2px); }
+  .score button.sel { background: linear-gradient(135deg,#533C9D,#7B5FC7); color: white; border-color: transparent; box-shadow: 0 8px 20px -6px rgba(83,60,157,.4); }
+  .score-labels { display: flex; justify-content: space-between; font-size: 11px; color: #8B85A1; margin-bottom: 20px; }
+  textarea { width: 100%; min-height: 80px; padding: 12px 14px; border: 1.5px solid #E8E5EE; border-radius: 12px; font-family: inherit; font-size: 14px; resize: vertical; outline: none; }
+  textarea:focus { border-color: #7B5FC7; box-shadow: 0 0 0 4px rgba(123,95,199,.12); }
+  button.submit { width: 100%; height: 50px; border: none; border-radius: 999px; background: linear-gradient(135deg,#533C9D,#7B5FC7); color: white; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 18px; box-shadow: 0 10px 24px -8px rgba(83,60,157,.5); }
+  button.submit:disabled { opacity: .5; cursor: not-allowed; }
+  .thanks { padding: 40px 20px; text-align: center; }
+  .thanks h2 { font-size: 28px; color: #10b981; margin-bottom: 10px; }
+  .err { color: #b91c1c; font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <img src="/logo.svg" alt="Lavandery" class="logo"/>
+  <div id="before">
+    <h1>Sua opinião é essencial</h1>
+    <p class="sub">Ajude a Lavandery a melhorar o serviço do seu condomínio.</p>
+    <div class="condo" id="condoName">—</div>
+    <div class="q">De 0 a 10, o quanto você recomendaria a Lavandery para outro condomínio?</div>
+    <div class="score" id="scoreButtons"></div>
+    <div class="score-labels"><span>Nada provável</span><span>Muito provável</span></div>
+    <textarea id="comment" placeholder="Deixe um comentário (opcional)..."></textarea>
+    <button class="submit" id="submit" disabled>Enviar avaliação</button>
+    <div class="err" id="err" style="display:none"></div>
+  </div>
+  <div id="after" style="display:none" class="thanks">
+    <h2>✓ Obrigado!</h2>
+    <p class="sub">Sua avaliação foi registrada. Vamos usar pra melhorar o serviço.</p>
+  </div>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const token = params.get('token');
+let selected = null;
+const scoreHost = document.querySelector('#scoreButtons');
+for (let i = 0; i <= 10; i++) {
+  const b = document.createElement('button');
+  b.textContent = i; b.dataset.score = i;
+  b.addEventListener('click', () => {
+    selected = i;
+    document.querySelectorAll('#scoreButtons button').forEach(x => x.classList.toggle('sel', x.dataset.score == i));
+    document.querySelector('#submit').disabled = false;
+  });
+  scoreHost.appendChild(b);
+}
+(async () => {
+  if (!token) return;
+  try {
+    const r = await fetch('/api/nps/' + token);
+    const d = await r.json();
+    if (r.ok) document.querySelector('#condoName').textContent = d.condo_name || '—';
+    if (d.answered_at) {
+      document.querySelector('#before').style.display = 'none';
+      document.querySelector('#after').style.display = 'block';
+    }
+  } catch {}
+})();
+document.querySelector('#submit').addEventListener('click', async () => {
+  if (selected == null) return;
+  const err = document.querySelector('#err'); err.style.display = 'none';
+  try {
+    const r = await fetch('/api/nps/' + token, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ score: selected, comment: document.querySelector('#comment').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'erro');
+    document.querySelector('#before').style.display = 'none';
+    document.querySelector('#after').style.display = 'block';
+  } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+});
+</script>
+</body>
+</html>

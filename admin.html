@@ -72,6 +72,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l10 4v6c0 5-4 9-10 10-6-1-10-5-10-10V6l10-4z"/></svg>
       Moskit CRM
     </a>
+    <a href="#" data-tab="ops" class="tab nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>
+      Operação Avançada
+    </a>
 
     <div class="sidebar-section">Cadastro</div>
     <a href="#" data-tab="condos" class="tab nav-item">
@@ -543,6 +547,34 @@
   <div id="cpTabImplantation" class="cp-panel" style="display:none"></div>
   <div id="cpTabPortal" class="cp-panel" style="display:none"></div>
   <div id="cpTabDocuments" class="cp-panel" style="display:none"></div>
+</main>
+
+<!-- OPERAÇÃO AVANÇADA: vendas, NPS, estoque, anomalias, produtividade, auditoria, backup -->
+<main class="page hidden" id="opsMain">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Operação Avançada</h1>
+      <p>Pipeline de vendas, NPS, estoque, alertas e controles administrativos.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <select id="opsYear" class="input" style="height:38px;width:110px"></select>
+      <a class="btn-new brand" id="opsAnnualReport" href="#" target="_blank">📄 Relatório anual</a>
+    </div>
+  </div>
+
+  <div class="cp-tabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--ink-200);overflow-x:auto">
+    <button class="cp-tab opsTab active" data-opsview="dashboard">📊 Visão</button>
+    <button class="cp-tab opsTab" data-opsview="leads">💼 Vendas</button>
+    <button class="cp-tab opsTab" data-opsview="commissions">💰 Comissões</button>
+    <button class="cp-tab opsTab" data-opsview="nps">⭐ NPS</button>
+    <button class="cp-tab opsTab" data-opsview="productivity">🔧 Técnicos</button>
+    <button class="cp-tab opsTab" data-opsview="anomalies">⚠️ Anomalias</button>
+    <button class="cp-tab opsTab" data-opsview="stock">📦 Estoque</button>
+    <button class="cp-tab opsTab" data-opsview="export">📥 Exports</button>
+    <button class="cp-tab opsTab" data-opsview="audit">🛡️ Auditoria</button>
+    <button class="cp-tab opsTab" data-opsview="backup">💾 Backup</button>
+  </div>
+  <div id="opsView"></div>
 </main>
 
 <!-- MOSKIT CRM -->
@@ -2347,7 +2379,7 @@ async function initGlobe() {
 // globo removido
 
 // ---------- Tabs ----------
-const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos', repasses:'Repasses', moskit:'Moskit CRM' };
+const TAB_LABELS = { dash:'Dashboard', condos:'Condomínios', schedule:'Manutenções Preventivas', calendar:'Agenda Geral', map:'Mapa & Rota', supplies:'Insumos & Entregas', tickets:'Chamados', import:'Importar do Autentique', integrations:'Integrações', history:'Histórico de consumo', implantations:'Implantações', deliveries:'Entrega de Equipamentos', repasses:'Repasses', moskit:'Moskit CRM', ops:'Operação Avançada' };
 function showTab(tab) {
   document.querySelectorAll('.tab').forEach(a => a.classList.toggle('active', a.dataset.tab===tab));
   const crumb = document.querySelector('#crumbTitle');
@@ -2364,6 +2396,8 @@ function showTab(tab) {
   if (tab === 'repasses') loadRepassesPage();
   document.querySelector('#moskitMain')?.classList.toggle('hidden', tab!=='moskit');
   if (tab === 'moskit') loadMoskit();
+  document.querySelector('#opsMain')?.classList.toggle('hidden', tab!=='ops');
+  if (tab === 'ops') loadOps();
   document.querySelector('#condoPanelMain')?.classList.toggle('hidden', tab!=='condoPanel');
   document.querySelector('#calendarMain')?.classList.toggle('hidden', tab!=='calendar');
   if (tab === 'implantations') loadImplantations();
@@ -2784,6 +2818,342 @@ document.querySelector('#cpPdf')?.addEventListener('click', () => {
   const year = String(new Date().getFullYear());
   window.open(`/api/condominiums/${_cpCondo.id}/repasse-report.pdf?year=${year}`, '_blank');
 });
+
+// ---------- OPERAÇÃO AVANÇADA ----------
+let _opsView = 'dashboard';
+async function loadOps() {
+  // Ano no topo
+  const ys = document.querySelector('#opsYear');
+  if (!ys.options.length) {
+    const cur = new Date().getFullYear();
+    ys.innerHTML = [cur, cur-1, cur-2].map(y => `<option>${y}</option>`).join('');
+  }
+  const y = ys.value || String(new Date().getFullYear());
+  document.querySelector('#opsAnnualReport').href = '/api/reports/annual.pdf?year=' + y;
+  renderOpsView(_opsView);
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('.opsTab');
+  if (t) { document.querySelectorAll('.opsTab').forEach(x => x.classList.toggle('active', x === t)); renderOpsView(t.dataset.opsview); }
+});
+document.querySelector('#opsYear')?.addEventListener('change', loadOps);
+
+async function renderOpsView(view) {
+  _opsView = view;
+  const host = document.querySelector('#opsView');
+  host.innerHTML = '<div class="card-new" style="padding:40px;text-align:center;color:var(--ink-500)">⏳ Carregando...</div>';
+  const year = document.querySelector('#opsYear').value;
+  try {
+    if (view === 'dashboard') host.innerHTML = await renderOpsDashboard(year);
+    else if (view === 'leads') host.innerHTML = await renderOpsLeads();
+    else if (view === 'commissions') host.innerHTML = await renderOpsCommissions(year);
+    else if (view === 'nps') host.innerHTML = await renderOpsNps();
+    else if (view === 'productivity') host.innerHTML = await renderOpsProductivity();
+    else if (view === 'anomalies') host.innerHTML = await renderOpsAnomalies();
+    else if (view === 'stock') host.innerHTML = await renderOpsStock();
+    else if (view === 'export') host.innerHTML = renderOpsExport(year);
+    else if (view === 'audit') host.innerHTML = await renderOpsAudit();
+    else if (view === 'backup') host.innerHTML = await renderOpsBackup();
+    // Re-bind handlers dinâmicos
+    bindOpsHandlers();
+  } catch (e) { host.innerHTML = '<div class="card-new" style="padding:20px;color:#dc2626">Erro: '+ esc(e.message) + '</div>'; }
+}
+
+const _m = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+async function renderOpsDashboard(year) {
+  const [leadStats, npsStats, anomalies, prod] = await Promise.all([
+    fetch('/api/leads/stats').then(r=>r.ok?r.json():[]),
+    fetch('/api/nps/stats/summary').then(r=>r.ok?r.json():{}),
+    fetch('/api/anomalies').then(r=>r.ok?r.json():[]),
+    fetch('/api/tech/productivity').then(r=>r.ok?r.json():[]),
+  ]);
+  const totalLeads = leadStats.reduce((s,l)=>s+l.count,0);
+  const pipeline = leadStats.reduce((s,l)=>s+l.total,0);
+  const topTech = prod[0];
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
+      <div class="kpi-mini"><div class="label">Leads em pipeline</div><div class="value" style="color:#533C9D">${totalLeads}</div><div class="hint">${_m(pipeline)} previsto</div></div>
+      <div class="kpi-mini"><div class="label">NPS</div><div class="value" style="color:${npsStats.nps>=50?'#10b981':npsStats.nps>0?'#F59E0B':'#ef4444'}">${npsStats.nps||0}</div><div class="hint">${npsStats.answered||0}/${npsStats.total_sent||0} respondidos</div></div>
+      <div class="kpi-mini"><div class="label">Anomalias ativas</div><div class="value" style="color:${anomalies.length?'#ef4444':'#10b981'}">${anomalies.length}</div><div class="hint">${anomalies.length?'precisa atenção':'tudo normal'}</div></div>
+      <div class="kpi-mini"><div class="label">Técnico top</div><div class="value" style="font-size:18px">${topTech?.name||'—'}</div><div class="hint">${topTech?.done||0} visitas · SLA ${topTech?.sla_pct||0}%</div></div>
+    </div>
+    <div class="card-new" style="padding:22px">
+      <div class="card-title" style="margin-bottom:10px">💡 Atalhos rápidos</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+        <button class="btn-new ghost" onclick="renderOpsView('leads')">+ Novo lead</button>
+        <button class="btn-new ghost" onclick="renderOpsView('commissions')">Calcular comissões</button>
+        <button class="btn-new ghost" onclick="renderOpsView('anomalies')">Ver anomalias</button>
+        <button class="btn-new ghost" onclick="renderOpsView('backup')">Fazer backup agora</button>
+      </div>
+    </div>`;
+}
+
+async function renderOpsLeads() {
+  const [leads, stats] = await Promise.all([
+    fetch('/api/leads').then(r=>r.ok?r.json():[]),
+    fetch('/api/leads/stats').then(r=>r.ok?r.json():[]),
+  ]);
+  const STAGES = ['prospeccao','qualificado','proposta','negociacao','fechado','perdido'];
+  const STAGE_LBL = { prospeccao:'Prospecção', qualificado:'Qualificado', proposta:'Proposta', negociacao:'Negociação', fechado:'Fechado ✓', perdido:'Perdido' };
+  const STAGE_COL = { prospeccao:'#94a3b8', qualificado:'#3b82f6', proposta:'#f59e0b', negociacao:'#8b5cf6', fechado:'#10b981', perdido:'#ef4444' };
+  const byStage = Object.fromEntries(STAGES.map(s => [s, leads.filter(l => l.stage === s)]));
+  return `
+    <div class="card-new" style="padding:20px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="card-title">Pipeline de vendas</div>
+        <button class="btn-new brand sm" onclick="newLeadPrompt()">+ Novo lead</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(${STAGES.length},1fr);gap:10px">
+        ${STAGES.map(s => `
+          <div style="background:rgba(255,255,255,.5);border-radius:10px;padding:10px;min-height:120px">
+            <div style="font-size:11px;font-weight:700;color:${STAGE_COL[s]};text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${STAGE_LBL[s]}</div>
+            <div style="font-size:20px;font-weight:700">${byStage[s].length}</div>
+            <div style="font-size:11px;color:var(--ink-500)">${_m(byStage[s].reduce((sum,l)=>sum+(l.expected_value||0),0))}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="card-new" style="padding:0;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead style="background:var(--ink-50)"><tr>
+          <th style="text-align:left;padding:10px 14px">Condomínio</th>
+          <th style="text-align:left;padding:10px">Contato</th>
+          <th style="text-align:left;padding:10px">Cidade</th>
+          <th style="text-align:left;padding:10px">Estágio</th>
+          <th style="text-align:right;padding:10px">Valor</th>
+          <th style="text-align:left;padding:10px">Vendedor</th>
+          <th style="padding:10px"></th>
+        </tr></thead>
+        <tbody>${leads.map(l => `<tr style="border-top:1px solid var(--ink-100)">
+          <td style="padding:10px 14px"><b>${esc(l.condo_name)}</b>${l.units?` · ${l.units}un`:''}</td>
+          <td style="padding:10px">${esc(l.contact_name||'—')}<div style="font-size:11px;color:var(--ink-500)">${esc(l.contact_phone||'')}</div></td>
+          <td style="padding:10px">${esc(l.city||'—')}</td>
+          <td style="padding:10px"><select onchange="updateLeadStage('${l.id}',this.value)" style="border:none;background:${STAGE_COL[l.stage]}22;color:${STAGE_COL[l.stage]};font-weight:600;padding:4px 8px;border-radius:6px;font-size:12px">${STAGES.map(s=>`<option value="${s}" ${l.stage===s?'selected':''}>${STAGE_LBL[s]}</option>`).join('')}</select></td>
+          <td style="padding:10px;text-align:right">${_m(l.expected_value)}</td>
+          <td style="padding:10px">${esc(l.owner||'—')}</td>
+          <td style="padding:10px"><button onclick="deleteLead('${l.id}')" style="background:none;border:none;color:#ef4444;cursor:pointer">×</button></td>
+        </tr>`).join('') || '<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--ink-400)">Nenhum lead cadastrado. Clique em + Novo lead.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+window.newLeadPrompt = async () => {
+  const condo_name = prompt('Nome do condomínio prospectado:');
+  if (!condo_name) return;
+  const contact_name = prompt('Nome do contato:') || '';
+  const contact_phone = prompt('Telefone:') || '';
+  const units = parseInt(prompt('Unidades (apartamentos):') || '0') || 0;
+  const expected_value = parseFloat(prompt('Valor previsto do contrato mensal:') || '0') || 0;
+  await fetch('/api/leads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ condo_name, contact_name, contact_phone, units, expected_value }) });
+  renderOpsView('leads');
+  Toast.success('Lead criado');
+};
+window.updateLeadStage = async (id, stage) => {
+  await fetch('/api/leads/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ stage }) });
+  Toast.success('Estágio atualizado');
+};
+window.deleteLead = async (id) => {
+  if (!confirm('Excluir lead?')) return;
+  await fetch('/api/leads/'+id, { method:'DELETE' });
+  renderOpsView('leads');
+};
+
+async function renderOpsCommissions(year) {
+  const pct = 3;
+  const rows = await fetch(`/api/commissions?year=${year}&pct=${pct}`).then(r=>r.ok?r.json():[]);
+  const total = rows.reduce((s,r)=>s+(r.commission||0),0);
+  return `
+    <div class="card-new" style="padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div><div class="card-title">Comissões ${year}</div><div class="subtle" style="font-size:12px">Base: ${pct}% sobre repasse dos contratos vinculados ao vendedor</div></div>
+        <div style="text-align:right"><div class="subtle" style="font-size:11px">TOTAL A PAGAR</div><div style="font-size:22px;font-weight:700;color:#10b981">${_m(total)}</div></div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead style="background:var(--ink-50)"><tr>
+          <th style="text-align:left;padding:10px 14px">Vendedor</th>
+          <th style="text-align:right;padding:10px">Contratos</th>
+          <th style="text-align:right;padding:10px">Repasse gerado</th>
+          <th style="text-align:right;padding:10px">Comissão (${pct}%)</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--ink-100)">
+          <td style="padding:10px 14px"><b>${esc(r.seller_name)}</b></td>
+          <td style="padding:10px;text-align:right">${r.contracts}</td>
+          <td style="padding:10px;text-align:right">${_m(r.repasse_total)}</td>
+          <td style="padding:10px;text-align:right;color:#10b981;font-weight:700">${_m(r.commission)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+async function renderOpsNps() {
+  const s = await fetch('/api/nps/stats/summary').then(r=>r.ok?r.json():{});
+  return `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px">
+      <div class="kpi-mini"><div class="label">NPS Geral</div><div class="value" style="color:${s.nps>=50?'#10b981':s.nps>0?'#F59E0B':'#ef4444'}">${s.nps||0}</div></div>
+      <div class="kpi-mini"><div class="label">Promotores (9-10)</div><div class="value" style="color:#10b981">${s.promoters||0}</div></div>
+      <div class="kpi-mini"><div class="label">Neutros (7-8)</div><div class="value">${s.passives||0}</div></div>
+      <div class="kpi-mini"><div class="label">Detratores (0-6)</div><div class="value" style="color:#ef4444">${s.detractors||0}</div></div>
+    </div>
+    <div class="card-new" style="padding:22px">
+      <div class="card-title" style="margin-bottom:10px">Como usar</div>
+      <div style="color:var(--ink-700);font-size:13px;line-height:1.6">Ao finalizar uma visita técnica, chame <code>POST /api/nps/create</code> com <code>{condo_id, visit_id}</code> pra gerar um link único. O síndico recebe o link e avalia de 0 a 10. ${s.total_sent||0} pesquisas enviadas, ${s.answered||0} respondidas (${s.total_sent?Math.round(s.answered/s.total_sent*100):0}% taxa de resposta).</div>
+    </div>`;
+}
+
+async function renderOpsProductivity() {
+  const rows = await fetch('/api/tech/productivity?days=90').then(r=>r.ok?r.json():[]);
+  return `
+    <div class="card-new" style="padding:22px">
+      <div class="card-title" style="margin-bottom:14px">Produtividade técnica (últimos 90 dias)</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead style="background:var(--ink-50)"><tr>
+          <th style="text-align:left;padding:10px 14px">Técnico</th>
+          <th style="text-align:right;padding:10px">Concluídas</th>
+          <th style="text-align:right;padding:10px">Agendadas</th>
+          <th style="text-align:right;padding:10px">Perdidas</th>
+          <th style="text-align:right;padding:10px">Total</th>
+          <th style="text-align:right;padding:10px">SLA</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--ink-100)">
+          <td style="padding:10px 14px"><b>${esc(r.name)}</b></td>
+          <td style="padding:10px;text-align:right;color:#10b981">${r.done}</td>
+          <td style="padding:10px;text-align:right">${r.scheduled}</td>
+          <td style="padding:10px;text-align:right;color:#ef4444">${r.missed}</td>
+          <td style="padding:10px;text-align:right">${r.total}</td>
+          <td style="padding:10px;text-align:right"><span style="background:${r.sla_pct>=90?'#10b98122':r.sla_pct>=70?'#f59e0b22':'#ef444422'};color:${r.sla_pct>=90?'#10b981':r.sla_pct>=70?'#f59e0b':'#ef4444'};padding:2px 10px;border-radius:999px;font-weight:700">${r.sla_pct}%</span></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+async function renderOpsAnomalies() {
+  const rows = await fetch('/api/anomalies').then(r=>r.ok?r.json():[]);
+  if (!rows.length) return `<div class="card-new" style="padding:60px;text-align:center"><div style="font-size:48px">✅</div><div style="font-size:16px;font-weight:600;margin-top:12px">Tudo sob controle</div><div class="subtle">Nenhuma anomalia detectada nos ciclos dos condomínios.</div></div>`;
+  return `
+    <div class="card-new" style="padding:0;overflow:hidden">
+      <div style="padding:16px 22px;border-bottom:1px solid var(--ink-100)"><b>${rows.length} anomalia(s) ativa(s)</b> — detectadas automaticamente a cada 24h</div>
+      ${rows.map(a => `
+        <div style="padding:16px 22px;border-bottom:1px solid var(--ink-100);display:flex;justify-content:space-between;align-items:center;gap:14px">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px"><b>${esc(a.condo_name)}</b><span class="pill ${a.kind==='cycles_drop'?'danger':'warning'}">${a.kind==='cycles_drop'?'📉 QUEDA':'📈 PICO'}</span></div>
+            <div style="font-size:12px;color:var(--ink-600);margin-top:4px">${esc(a.details)}</div>
+          </div>
+          <button class="btn-new ghost sm" onclick="resolveAnomaly('${a.id}')">✓ Resolver</button>
+        </div>`).join('')}
+    </div>`;
+}
+window.resolveAnomaly = async (id) => {
+  await fetch(`/api/anomalies/${id}/resolve`, { method:'POST' });
+  renderOpsView('anomalies');
+  Toast.success('Marcada como resolvida');
+};
+
+async function renderOpsStock() {
+  const d = await fetch('/api/stock').then(r=>r.ok?r.json():{totals:[],moves:[]});
+  const balance = Object.fromEntries(d.totals.map(t => [t.product, t.balance]));
+  return `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px">
+      <div class="kpi-mini"><div class="label">🧴 Sabão no estoque</div><div class="value" style="color:#3b82f6">${(balance.soap||0).toFixed(1)}</div><div class="hint">galões</div></div>
+      <div class="kpi-mini"><div class="label">🌸 Amaciante</div><div class="value" style="color:#ec4899">${(balance.softener||0).toFixed(1)}</div><div class="hint">galões</div></div>
+      <div class="kpi-mini"><div class="label">📦 Outros</div><div class="value">${(balance.other||0).toFixed(1)}</div></div>
+    </div>
+    <div class="card-new" style="padding:22px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:10px">Registrar movimentação</div>
+      <div style="display:grid;grid-template-columns:1fr 120px 1fr auto;gap:8px">
+        <select id="skProd" class="input" style="height:38px"><option value="soap">Sabão</option><option value="softener">Amaciante</option><option value="other">Outro</option></select>
+        <input id="skDelta" class="input" type="number" step="0.5" placeholder="Qtd (+/-)" style="height:38px"/>
+        <input id="skReason" class="input" placeholder="Motivo (compra, entrega, ajuste)" style="height:38px"/>
+        <button class="btn-new brand" onclick="addStockMove()">Registrar</button>
+      </div>
+    </div>
+    <div class="card-new" style="padding:0;overflow:hidden">
+      <div style="padding:14px 22px;border-bottom:1px solid var(--ink-100);font-weight:600">Últimas movimentações</div>
+      ${d.moves.slice(0,30).map(m => `
+        <div style="padding:10px 22px;border-bottom:1px solid var(--ink-100);display:flex;justify-content:space-between;font-size:13px">
+          <div>
+            <b style="color:${m.delta>0?'#10b981':'#ef4444'}">${m.delta>0?'+':''}${m.delta}</b>
+            ${m.product==='soap'?'🧴':m.product==='softener'?'🌸':'📦'} · ${esc(m.reason||'—')}
+            ${m.condo_name?` · ${esc(m.condo_name)}`:''}
+          </div>
+          <div style="font-size:11px;color:var(--ink-500)">${new Date(m.at).toLocaleString('pt-BR')} · ${esc(m.actor||'')}</div>
+        </div>`).join('') || '<div style="padding:20px;text-align:center;color:var(--ink-400)">Sem movimentações</div>'}
+    </div>`;
+}
+window.addStockMove = async () => {
+  const product = document.querySelector('#skProd').value;
+  const delta = parseFloat(document.querySelector('#skDelta').value);
+  const reason = document.querySelector('#skReason').value;
+  if (!delta) return Toast.warning('Informe a quantidade');
+  await fetch('/api/stock/movement', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ product, delta, reason }) });
+  Toast.success('Registrado');
+  renderOpsView('stock');
+};
+
+function renderOpsExport(year) {
+  return `
+    <div class="card-new" style="padding:30px;text-align:center">
+      <div style="font-size:48px">📥</div>
+      <div style="font-size:18px;font-weight:600;margin-top:12px">Exportar dados</div>
+      <div class="subtle" style="font-size:13px;margin-top:6px;margin-bottom:24px">Baixe tudo em planilha pronta pro contador</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <a class="btn-new brand" href="/api/export/repasses.xlsx?year=${year}">📊 Repasses ${year} (XLSX)</a>
+        <a class="btn-new ghost" href="/api/reports/annual.pdf?year=${year}" target="_blank">📄 Relatório Anual PDF</a>
+      </div>
+    </div>`;
+}
+
+async function renderOpsAudit() {
+  const logs = await fetch('/api/audit-logs').then(r=>r.ok?r.json():[]);
+  return `
+    <div class="card-new" style="padding:0;overflow:hidden">
+      <div style="padding:14px 22px;border-bottom:1px solid var(--ink-100)"><b>${logs.length} registros recentes</b> — ações dos usuários no sistema</div>
+      <div style="max-height:600px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:monospace">
+          <thead style="background:var(--ink-50);position:sticky;top:0"><tr>
+            <th style="text-align:left;padding:8px 14px">Quando</th>
+            <th style="text-align:left;padding:8px">Usuário</th>
+            <th style="text-align:left;padding:8px">Método</th>
+            <th style="text-align:left;padding:8px">Rota</th>
+            <th style="text-align:right;padding:8px">Status</th>
+          </tr></thead>
+          <tbody>${logs.map(l => `<tr style="border-top:1px solid var(--ink-100)">
+            <td style="padding:6px 14px;color:var(--ink-500)">${new Date(l.at).toLocaleString('pt-BR')}</td>
+            <td style="padding:6px"><b>${esc(l.user_name||l.user_id||'—')}</b> <span style="color:var(--ink-400)">${esc(l.user_role||'')}</span></td>
+            <td style="padding:6px"><span style="color:${l.method==='DELETE'?'#ef4444':l.method==='POST'?'#10b981':'#3b82f6'};font-weight:600">${l.method}</span></td>
+            <td style="padding:6px;color:var(--ink-700)">${esc(l.path)}</td>
+            <td style="padding:6px;text-align:right;color:${l.status>=400?'#ef4444':'#10b981'}">${l.status}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+async function renderOpsBackup() {
+  const b = await fetch('/api/backup/list').then(r=>r.ok?r.json():{files:[]});
+  return `
+    <div class="card-new" style="padding:22px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="card-title">Backup automático</div>
+          <div class="subtle" style="font-size:12px">Roda 1x por dia · retém últimos 30 · armazena em ${esc(b.dir||'—')}</div>
+        </div>
+        <button class="btn-new brand" onclick="runBackupNow()">💾 Backup agora</button>
+      </div>
+    </div>
+    <div class="card-new" style="padding:0;overflow:hidden">
+      <div style="padding:14px 22px;border-bottom:1px solid var(--ink-100)"><b>${b.files?.length||0} backups armazenados</b></div>
+      ${(b.files||[]).map(f => `
+        <div style="padding:10px 22px;border-bottom:1px solid var(--ink-100);display:flex;justify-content:space-between;font-size:13px">
+          <span style="font-family:monospace">${esc(f.name)}</span>
+          <span style="color:var(--ink-500)">${f.size_kb}KB · ${new Date(f.created).toLocaleString('pt-BR')}</span>
+        </div>`).join('') || '<div style="padding:20px;text-align:center;color:var(--ink-400)">Nenhum backup ainda — clique em "Backup agora"</div>'}
+    </div>`;
+}
+window.runBackupNow = async () => {
+  await fetch('/api/backup/run', { method:'POST' });
+  Toast.success('Backup concluído');
+  renderOpsView('backup');
+};
+function bindOpsHandlers() { /* placeholder — handlers usam onclick inline via window.* */ }
 
 // ---------- MOSKIT CRM (aba dedicada) + auto-refresh ----------
 let _mkView = 'companies';

@@ -22,6 +22,7 @@ COPY admin.html /app/admin.html
 COPY chamado.html /app/chamado.html
 COPY condo-login.html /app/condo-login.html
 COPY condo.html /app/condo.html
+COPY nps.html /app/nps.html
 COPY implantacao.html /app/implantacao.html
 COPY index.html /app/index.html
 COPY login.html /app/login.html

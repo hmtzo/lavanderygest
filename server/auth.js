@@ -270,6 +270,8 @@ export const PUBLIC_PATHS = [
   /^\/api\/condo-auth\//,
   /^\/condo-login\.html$/,
   /^\/condo\.html$/,
+  /^\/nps\.html$/,
+  /^\/api\/nps\/[a-f0-9]+$/,
   /^\/api\/public\//,
   /^\/api\/webhooks\/incoming\//,
   /^\/api\/public\/calendar\.ics/,

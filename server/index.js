@@ -3777,6 +3777,328 @@ app.post('/api/integrations/s3/test', async (_req, res) => {
   res.json(await s3Test(cfg));
 });
 
+// ===================================================================
+// BATCH DE FEATURES: backup + auditoria + vendas + NPS + estoque + anomalias
+// ===================================================================
+
+// 1) BACKUP AUTOMÁTICO DIÁRIO
+const BACKUP_DIR = process.env.NODE_ENV === 'production' ? '/data/backups' : path.join(__dirname, '..', 'backups');
+try { fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch {}
+function runBackup() {
+  try {
+    const dbPath = process.env.LAVANDERY_DB || path.join(__dirname, 'lavandery.db');
+    if (!fs.existsSync(dbPath)) return;
+    const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    const dest = path.join(BACKUP_DIR, `lavandery-${ts}.db`);
+    fs.copyFileSync(dbPath, dest);
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('lavandery-')).sort();
+    while (files.length > 30) { try { fs.unlinkSync(path.join(BACKUP_DIR, files.shift())); } catch {} }
+    console.log('[backup] ok:', dest);
+  } catch (e) { console.error('[backup] falhou:', e.message); }
+}
+setTimeout(runBackup, 30000);
+setInterval(runBackup, 24 * 60 * 60 * 1000);
+app.get('/api/backup/list', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error:'admin_only' });
+  try {
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.db')).sort().reverse().map(f => {
+      const s = fs.statSync(path.join(BACKUP_DIR, f));
+      return { name: f, size_kb: Math.round(s.size/1024), created: s.mtime };
+    });
+    res.json({ dir: BACKUP_DIR, count: files.length, files });
+  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+app.post('/api/backup/run', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error:'admin_only' });
+  runBackup(); res.json({ ok: true });
+});
+
+// 2) LOGS DE AUDITORIA
+db.exec(`CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY, user_id TEXT, user_name TEXT, user_role TEXT,
+  method TEXT, path TEXT, status INTEGER, body TEXT, ip TEXT,
+  at INTEGER DEFAULT (strftime('%s','now')*1000)
+);
+CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_logs(at DESC);`);
+app.use('/api', (req, res, next) => {
+  if (!['POST','PATCH','DELETE','PUT'].includes(req.method)) return next();
+  if (req.path.startsWith('/auth/login') || req.path.startsWith('/condo-auth')) return next();
+  res.on('finish', () => {
+    if (!req.user) return;
+    try {
+      const bodyStr = JSON.stringify(req.body||{}).slice(0,500);
+      db.prepare('INSERT INTO audit_logs (id,user_id,user_name,user_role,method,path,status,body,ip) VALUES (?,?,?,?,?,?,?,?,?)')
+        .run('au_'+Math.random().toString(36).slice(2,10), req.user.id, req.user.name, req.user.role, req.method, req.baseUrl + req.path, res.statusCode, bodyStr, req.ip);
+    } catch {}
+  });
+  next();
+});
+app.get('/api/audit-logs', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error:'admin_only' });
+  res.json(db.prepare('SELECT * FROM audit_logs ORDER BY at DESC LIMIT 500').all());
+});
+
+// 3) PIPELINE DE VENDAS
+db.exec(`CREATE TABLE IF NOT EXISTS sales_leads (
+  id TEXT PRIMARY KEY, condo_name TEXT NOT NULL,
+  contact_name TEXT, contact_phone TEXT, contact_email TEXT,
+  city TEXT, units INTEGER,
+  stage TEXT DEFAULT 'prospeccao',
+  expected_value REAL, owner TEXT, notes TEXT,
+  next_action_at INTEGER, condo_id TEXT,
+  created_at INTEGER DEFAULT (strftime('%s','now')*1000),
+  updated_at INTEGER DEFAULT (strftime('%s','now')*1000)
+);
+CREATE INDEX IF NOT EXISTS idx_leads_stage ON sales_leads(stage);`);
+app.get('/api/leads', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const stage = req.query.stage;
+  res.json(stage ? db.prepare('SELECT * FROM sales_leads WHERE stage=? ORDER BY updated_at DESC').all(stage)
+    : db.prepare('SELECT * FROM sales_leads ORDER BY updated_at DESC LIMIT 500').all());
+});
+app.post('/api/leads', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const b = req.body || {};
+  const id = 'ld_' + Math.random().toString(36).slice(2,10);
+  db.prepare('INSERT INTO sales_leads (id,condo_name,contact_name,contact_phone,contact_email,city,units,stage,expected_value,owner,notes,next_action_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(id, b.condo_name||'', b.contact_name||'', b.contact_phone||'', b.contact_email||'', b.city||'', b.units||0, b.stage||'prospeccao', b.expected_value||0, b.owner||req.user.name, b.notes||'', b.next_action_at||null);
+  res.json({ ok:true, id });
+});
+app.patch('/api/leads/:id', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const b = req.body || {};
+  const fields = ['condo_name','contact_name','contact_phone','contact_email','city','units','stage','expected_value','owner','notes','next_action_at','condo_id'];
+  const sets = [], args = [];
+  fields.forEach(f => { if (b[f] !== undefined) { sets.push(`${f}=?`); args.push(b[f]); } });
+  if (!sets.length) return res.json({ ok:true });
+  sets.push('updated_at=?'); args.push(Date.now()); args.push(req.params.id);
+  db.prepare(`UPDATE sales_leads SET ${sets.join(', ')} WHERE id=?`).run(...args);
+  res.json({ ok:true });
+});
+app.delete('/api/leads/:id', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  db.prepare('DELETE FROM sales_leads WHERE id=?').run(req.params.id);
+  res.json({ ok:true });
+});
+app.get('/api/leads/stats', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  res.json(db.prepare(`SELECT stage, COUNT(*) as count, COALESCE(SUM(expected_value),0) as total FROM sales_leads GROUP BY stage`).all());
+});
+
+// 4) COMISSÕES
+app.get('/api/commissions', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const year = req.query.year || String(new Date().getFullYear());
+  const pct = parseFloat(req.query.pct) || 3;
+  const rows = db.prepare(`SELECT seller_name, COUNT(*) as contracts,
+    COALESCE((SELECT SUM(repasse_liquido) FROM condo_repasse WHERE condo_id=c.id AND month LIKE ?),0) as repasse_total
+    FROM condominiums c WHERE seller_name IS NOT NULL AND seller_name != '' GROUP BY seller_name ORDER BY repasse_total DESC`).all(year+'%');
+  res.json(rows.map(r => ({ ...r, commission: (r.repasse_total || 0) * (pct/100), commission_pct: pct })));
+});
+
+// 5) NPS
+db.exec(`CREATE TABLE IF NOT EXISTS nps_surveys (
+  id TEXT PRIMARY KEY, visit_id TEXT, condo_id TEXT,
+  token TEXT UNIQUE, sent_at INTEGER, answered_at INTEGER,
+  score INTEGER, comment TEXT,
+  created_at INTEGER DEFAULT (strftime('%s','now')*1000)
+);`);
+app.post('/api/nps/create', (req, res) => {
+  if (!req.user) return res.status(401).json({ error:'unauthorized' });
+  const { visit_id, condo_id } = req.body || {};
+  if (!condo_id) return res.status(400).json({ error:'missing_condo' });
+  const token = crypto.randomBytes(16).toString('hex');
+  const id = 'nps_' + Math.random().toString(36).slice(2,10);
+  db.prepare('INSERT INTO nps_surveys (id,visit_id,condo_id,token,sent_at) VALUES (?,?,?,?,?)').run(id, visit_id||null, condo_id, token, Date.now());
+  res.json({ ok:true, token, url: `/nps.html?token=${token}` });
+});
+app.get('/api/nps/stats/summary', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const answered = db.prepare('SELECT score FROM nps_surveys WHERE answered_at IS NOT NULL AND score IS NOT NULL').all();
+  const promoters = answered.filter(x => x.score >= 9).length;
+  const detractors = answered.filter(x => x.score <= 6).length;
+  const nps = answered.length ? Math.round(((promoters - detractors) / answered.length) * 100) : 0;
+  res.json({ total_sent: db.prepare('SELECT COUNT(*) c FROM nps_surveys').get().c, answered: answered.length, nps, promoters, detractors, passives: answered.length - promoters - detractors });
+});
+
+// 6) PRODUTIVIDADE
+app.get('/api/tech/productivity', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const days = parseInt(req.query.days) || 90;
+  const since = new Date(Date.now() - days*86400_000).toISOString().slice(0,10);
+  const rows = db.prepare(`SELECT t.id, t.name,
+    COUNT(CASE WHEN s.status='done' THEN 1 END) as done,
+    COUNT(CASE WHEN s.status='scheduled' THEN 1 END) as scheduled,
+    COUNT(CASE WHEN s.status='missed' THEN 1 END) as missed,
+    COUNT(s.id) as total
+    FROM technicians t LEFT JOIN visits_schedule s ON s.technician_id=t.id AND s.date >= ?
+    GROUP BY t.id ORDER BY done DESC`).all(since);
+  res.json(rows.map(r => ({ ...r, sla_pct: r.total ? Math.round(r.done/r.total*100) : 0 })));
+});
+
+// 7) ANOMALIAS
+db.exec(`CREATE TABLE IF NOT EXISTS anomaly_alerts (
+  id TEXT PRIMARY KEY, condo_id TEXT, kind TEXT,
+  detected_at INTEGER DEFAULT (strftime('%s','now')*1000),
+  current_value REAL, avg_value REAL, delta_pct REAL,
+  details TEXT, resolved INTEGER DEFAULT 0
+);`);
+async function checkAnomalies() {
+  const thisMonth = new Date().toISOString().slice(0,7);
+  const condos = db.prepare('SELECT id FROM condominiums').all();
+  for (const c of condos) {
+    const curr = db.prepare('SELECT cycles FROM condo_repasse WHERE condo_id=? AND month=?').get(c.id, thisMonth);
+    if (!curr?.cycles) continue;
+    const history = db.prepare('SELECT cycles FROM condo_repasse WHERE condo_id=? AND month != ? ORDER BY month DESC LIMIT 3').all(c.id, thisMonth);
+    if (history.length < 2) continue;
+    const avg = history.reduce((s,x)=>s+x.cycles,0) / history.length;
+    if (!avg) continue;
+    const delta = (curr.cycles - avg) / avg * 100;
+    if (Math.abs(delta) > 30) {
+      const id = `anom_${c.id}_${thisMonth}`;
+      db.prepare('INSERT OR REPLACE INTO anomaly_alerts (id, condo_id, kind, current_value, avg_value, delta_pct, details) VALUES (?,?,?,?,?,?,?)')
+        .run(id, c.id, delta > 0 ? 'cycles_spike' : 'cycles_drop', curr.cycles, avg, delta,
+          `Ciclos do mês (${curr.cycles}) ${delta > 0 ? 'subiram' : 'caíram'} ${Math.abs(Math.round(delta))}% vs média 3 meses (${Math.round(avg)})`);
+    }
+  }
+}
+setTimeout(() => checkAnomalies().catch(()=>{}), 60_000);
+setInterval(() => checkAnomalies().catch(()=>{}), 24 * 60 * 60 * 1000);
+app.get('/api/anomalies', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  res.json(db.prepare(`SELECT a.*, c.name as condo_name FROM anomaly_alerts a
+    LEFT JOIN condominiums c ON c.id=a.condo_id WHERE resolved=0 ORDER BY detected_at DESC LIMIT 100`).all());
+});
+app.post('/api/anomalies/:id/resolve', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  db.prepare('UPDATE anomaly_alerts SET resolved=1 WHERE id=?').run(req.params.id);
+  res.json({ ok:true });
+});
+
+// 8) EXPORT XLSX
+app.get('/api/export/repasses.xlsx', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  try {
+    const XLSX = await import('xlsx');
+    const year = req.query.year || String(new Date().getFullYear());
+    const rows = db.prepare(`SELECT cr.*, c.name as condominio, c.cnpj, c.bank_name, c.bank_agency, c.bank_account
+      FROM condo_repasse cr LEFT JOIN condominiums c ON c.id=cr.condo_id
+      WHERE cr.month LIKE ? ORDER BY cr.month, c.name`).all(year+'%');
+    const data = rows.map(r => ({
+      'Mês': r.month, 'Condomínio': r.condominio, 'CNPJ': r.cnpj||'',
+      'Ciclos': r.cycles, 'Lavagens': r.washes, 'Secagens': r.dries,
+      'Tipo': r.type, 'Valor Ref.': r.value, 'Preço Máquina': r.price,
+      'Imposto %': r.tax_pct, 'Receita Máquina': r.receita_maquina,
+      'Repasse Bruto': r.repasse_bruto, 'Imposto (R$)': r.imposto,
+      'Repasse Líquido': r.repasse_liquido, 'Líquido Lavandery': r.liquido_lavandery,
+      'Banco': r.bank_name||'', 'Agência': r.bank_agency||'', 'Conta': r.bank_account||'',
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Repasses ' + year);
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="repasses-${year}.xlsx"`);
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
+// 9) ESTOQUE CENTRAL
+db.exec(`CREATE TABLE IF NOT EXISTS stock_movements (
+  id TEXT PRIMARY KEY, product TEXT, delta REAL,
+  reason TEXT, condo_id TEXT, actor TEXT,
+  at INTEGER DEFAULT (strftime('%s','now')*1000)
+);`);
+app.get('/api/stock', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const totals = db.prepare(`SELECT product, COALESCE(SUM(delta),0) as balance FROM stock_movements GROUP BY product`).all();
+  const moves = db.prepare(`SELECT m.*, c.name as condo_name FROM stock_movements m LEFT JOIN condominiums c ON c.id=m.condo_id ORDER BY at DESC LIMIT 100`).all();
+  res.json({ totals, moves });
+});
+app.post('/api/stock/movement', (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const { product, delta, reason, condo_id } = req.body || {};
+  if (!product || delta == null) return res.status(400).json({ error:'missing' });
+  db.prepare('INSERT INTO stock_movements (id,product,delta,reason,condo_id,actor) VALUES (?,?,?,?,?,?)')
+    .run('sm_' + Math.random().toString(36).slice(2,10), product, parseFloat(delta), reason||'', condo_id||null, req.user.name);
+  res.json({ ok:true });
+});
+
+// 10) RELATÓRIO ANUAL CONSOLIDADO
+app.get('/api/reports/annual.pdf', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const year = req.query.year || String(new Date().getFullYear());
+  try {
+    const { jsPDF } = await import('jspdf');
+    const { getLogo } = await import('./logo-helper.js');
+    const logo = await getLogo().catch(() => null);
+    const doc = new jsPDF({ unit:'pt', format:'a4' });
+    const W = 595, H = 842;
+    const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    doc.setFillColor(83,60,157); doc.rect(0,0,W,H,'F');
+    if (logo?.dataUrlWhite) { try { doc.addImage(logo.dataUrlWhite, 'PNG', 50, 60, 200, 60); } catch {} }
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(40);
+    doc.text('RELATÓRIO', 50, 200); doc.text('ANUAL', 50, 250);
+    doc.setFont('helvetica','normal'); doc.setFontSize(28); doc.setTextColor(255,215,120);
+    doc.text(year, 50, 310);
+    doc.setTextColor(255); doc.setFontSize(14);
+    doc.text('Consolidado de operações e repasses', 50, 340);
+    const stats = db.prepare(`SELECT COUNT(DISTINCT condo_id) as condos, SUM(cycles) as ciclos,
+      SUM(repasse_liquido) as repassado, SUM(liquido_lavandery) as lavandery,
+      SUM(imposto) as impostos, SUM(receita_maquina) as receita
+      FROM condo_repasse WHERE month LIKE ?`).get(year+'%') || {};
+    const lines = [
+      ['Condomínios ativos', stats.condos || 0],
+      ['Ciclos realizados', (stats.ciclos||0).toLocaleString('pt-BR')],
+      ['Receita das máquinas', money(stats.receita)],
+      ['Repassado aos condomínios', money(stats.repassado)],
+      ['Impostos recolhidos', money(stats.impostos)],
+      ['Líquido Lavandery', money(stats.lavandery)],
+    ];
+    let yy = 440;
+    for (const [l, v] of lines) {
+      doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(200,190,230);
+      doc.text(l, 50, yy);
+      doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(255);
+      doc.text(String(v), W-50, yy, { align: 'right' });
+      yy += 30;
+    }
+    doc.addPage();
+    doc.setFillColor(248,246,252); doc.rect(0,0,W,H,'F');
+    doc.setFillColor(83,60,157); doc.rect(0,0,W,70,'F');
+    if (logo?.dataUrlWhite) { try { doc.addImage(logo.dataUrlWhite, 'PNG', 40, 18, 110, 36); } catch {} }
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text(`RELATÓRIO ANUAL ${year}`, W-40, 40, { align: 'right' });
+    const tops = db.prepare(`SELECT c.name, SUM(cr.cycles) as ciclos, SUM(cr.repasse_liquido) as repassado, SUM(cr.liquido_lavandery) as lavandery
+      FROM condo_repasse cr LEFT JOIN condominiums c ON c.id=cr.condo_id WHERE cr.month LIKE ?
+      GROUP BY cr.condo_id ORDER BY repassado DESC LIMIT 25`).all(year+'%');
+    doc.setTextColor(30); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+    doc.text(`Top condomínios em ${year}`, 40, 110);
+    let rowY = 140;
+    doc.setFillColor(83,60,157); doc.setTextColor(255); doc.setFontSize(9);
+    doc.rect(40, rowY-14, W-80, 22, 'F');
+    doc.text('#', 50, rowY); doc.text('CONDOMÍNIO', 72, rowY);
+    doc.text('CICLOS', 360, rowY, { align:'right' });
+    doc.text('REPASSADO', 440, rowY, { align:'right' });
+    doc.text('LAVANDERY', W-45, rowY, { align:'right' });
+    rowY += 18;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    tops.forEach((t, i) => {
+      if (rowY > H-50) { doc.addPage(); rowY = 50; }
+      if (i % 2 === 0) { doc.setFillColor(245,242,250); doc.rect(40, rowY-10, W-80, 18, 'F'); }
+      doc.setTextColor(100); doc.text(String(i+1), 50, rowY);
+      doc.setTextColor(40); doc.text((t.name||'').slice(0,42), 72, rowY);
+      doc.text((t.ciclos||0).toLocaleString('pt-BR'), 360, rowY, { align:'right' });
+      doc.setTextColor(83,60,157); doc.text(money(t.repassado), 440, rowY, { align:'right' });
+      doc.setTextColor(16,185,129); doc.text(money(t.lavandery), W-45, rowY, { align:'right' });
+      doc.setTextColor(40); rowY += 18;
+    });
+    const buf = Buffer.from(doc.output('arraybuffer'));
+    res.setHeader('Content-Type','application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="lavandery-anual-${year}.pdf"`);
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: String(e.message||e) }); }
+});
+
 // ---------- Moskit CRM ----------
 // Cache server-side atualizado automaticamente a cada 30min
 db.exec(`CREATE TABLE IF NOT EXISTS moskit_cache (
