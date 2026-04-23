@@ -63,34 +63,26 @@ async function fetchAllPaginated(cfg, endpoint, pageSize = 100) {
   return all;
 }
 
-// Busca todos os registros via POST /search com diferentes estratégias de paginação
+// Busca todos os registros: tenta vários padrões de paginação do Moskit
 async function searchAll(cfg, baseEndpoint) {
   const allMap = new Map();
-  // Moskit v2: POST /endpoint/search com body { page: N, pageSize: X } ou paginação via query
-  const MAX_PAGES = 200;
-  // Estratégia 1: page=N no body
-  let lastPageCount = -1;
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    let r;
+  const MAX_PAGES = 100;
+  // Estratégia principal: GET /endpoint com paginação via ?offset=N (do mais antigo até parar)
+  for (let page = 0; page < MAX_PAGES; page++) {
+    let batch;
     try {
-      r = await moskitFetch(cfg, `${baseEndpoint}/search?page=${page}&pageSize=100`, {
-        method: 'POST',
-        body: JSON.stringify({ page, pageSize: 100 }),
-      });
+      batch = await moskitFetch(cfg, `${baseEndpoint}?offset=${page * 10}`);
     } catch { break; }
-    const items = Array.isArray(r) ? r : (r?.data || r?.items || r?.results || []);
-    if (!Array.isArray(items) || items.length === 0) break;
-    const realItems = items.filter(x => x && typeof x === 'object' && x.id != null);
+    if (!Array.isArray(batch) || batch.length === 0) break;
     let added = 0;
-    for (const item of realItems) {
-      if (!allMap.has(item.id)) { allMap.set(item.id, item); added++; }
+    for (const item of batch) {
+      if (item?.id && !allMap.has(item.id)) { allMap.set(item.id, item); added++; }
     }
-    // Se página retornou só IDs já vistos, acabou
     if (added === 0) break;
-    // Se retornou menos que pageSize, provavelmente última página
-    if (realItems.length < 10) break;
-    await new Promise(res => setTimeout(res, 150));
+    if (batch.length < 10) break;
+    await new Promise(r => setTimeout(r, 150));
   }
+  // Se nada veio, fallback simples
   if (allMap.size === 0) {
     const fallback = await moskitFetch(cfg, baseEndpoint).catch(() => []);
     if (Array.isArray(fallback)) for (const it of fallback) if (it?.id) allMap.set(it.id, it);
