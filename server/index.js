@@ -1280,8 +1280,46 @@ app.post('/api/tickets', (req,res) => {
     opened_by_name||null, opened_by_email||null, opened_by_phone||null
   );
   emitEvent('ticket.created', { id, condo_id, title, priority, category }).catch(()=>{});
+  notifyTicketOpened(id).catch(()=>{});
   res.json({ ok:true, id });
 });
+
+// Envia notificação quando um chamado é aberto (admin + condomínio)
+async function notifyTicketOpened(ticketId) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(ticketId);
+  if (!t) return;
+  const condo = db.prepare('SELECT name, contact_email FROM condominiums WHERE id=?').get(t.condo_id);
+  const emoji = t.priority === 'urgente' ? '🚨' : t.priority === 'alta' ? '⚠️' : '🎫';
+  const subject = `${emoji} Novo chamado: ${t.title}`;
+  const body = `Um novo chamado foi aberto no sistema Lavandery.\n\n` +
+    `Condomínio: ${condo?.name || '—'}\nTítulo: ${t.title}\nPrioridade: ${t.priority||'media'}\n` +
+    `Categoria: ${t.category||'—'}\nAberto por: ${t.opened_by_name||'—'}\n\n${t.description||''}\n\n` +
+    `Acesse: https://lavandery.onrender.com/admin.html#tickets`;
+  // Admin
+  const admins = (getIntegration('admin_contacts')?.emails || '').split(',').map(s=>s.trim()).filter(Boolean);
+  for (const e of admins) { try { await sendEmail({ to: e, subject, text: body }, getIntegration); } catch {} }
+  // Condomínio
+  if (condo?.contact_email) { try { await sendEmail({ to: condo.contact_email, subject: `Chamado recebido — ${t.title}`, text: `Recebemos seu chamado "${t.title}". Estamos analisando e retornaremos em breve.\n\nLavandery` }, getIntegration); } catch {} }
+  // WhatsApp admin (se conectado)
+  const phones = (getIntegration('admin_contacts')?.phones || '').split(',').map(s=>s.trim()).filter(Boolean);
+  for (const p of phones) { try { await waSendText({ phone: p, message: `${emoji} ${t.priority?.toUpperCase()||'MEDIA'}\n${condo?.name||'—'}\n${t.title}\n${t.description||''}` }); } catch {} }
+}
+
+// Envia notificação quando um repasse é lançado
+async function notifyRepasseCreated(repasseId) {
+  const r = db.prepare('SELECT * FROM condo_repasse WHERE id=?').get(repasseId);
+  if (!r) return;
+  const condo = db.prepare('SELECT name, contact_email, bank_name FROM condominiums WHERE id=?').get(r.condo_id);
+  const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const subject = `💰 Repasse de ${r.month} disponível — ${money(r.repasse_liquido)}`;
+  const body = `O repasse do mês ${r.month} foi processado.\n\n` +
+    `Condomínio: ${condo?.name||'—'}\nCiclos: ${r.cycles}\nRepasse líquido: ${money(r.repasse_liquido)}\n\n` +
+    `Pagamento em D+60 no dia 25 do mês, ${condo?.bank_name? 'via '+condo.bank_name : 'na conta cadastrada'}.\n\n` +
+    `Ver detalhes: https://lavandery.onrender.com/condo-login.html`;
+  if (condo?.contact_email) { try { await sendEmail({ to: condo.contact_email, subject, text: body }, getIntegration); } catch {} }
+  const admins = (getIntegration('admin_contacts')?.emails || '').split(',').map(s=>s.trim()).filter(Boolean);
+  for (const e of admins) { try { await sendEmail({ to: e, subject: `[Admin] ${subject}`, text: body }, getIntegration); } catch {} }
+}
 
 app.get('/api/tickets', (req,res) => {
   const { status, condo, tech, priority } = req.query;
@@ -2002,6 +2040,7 @@ app.post('/api/condominiums/:id/repasse', (req, res) => {
   if (type === 'fixed' && value > 0) db.prepare('UPDATE condominiums SET cycle_rate=? WHERE id=?').run(value, req.params.id);
   if (price > 0) db.prepare('UPDATE condominiums SET cycle_price=? WHERE id=?').run(price, req.params.id);
   if (tax_pct > 0) db.prepare('UPDATE condominiums SET tax_rate=? WHERE id=?').run(tax_pct, req.params.id);
+  notifyRepasseCreated(id).catch(()=>{});
   res.json({ ok:true, id, receita, repasse_bruto, imposto, repasse_liquido: repasse_liq, liquido_lavandery: liq_lav });
 });
 // Relatório PDF consolidado de repasses do mês
@@ -3784,7 +3823,7 @@ app.post('/api/integrations/s3/test', async (_req, res) => {
 // 1) BACKUP AUTOMÁTICO DIÁRIO
 const BACKUP_DIR = process.env.NODE_ENV === 'production' ? '/data/backups' : path.join(__dirname, '..', 'backups');
 try { fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch {}
-function runBackup() {
+async function runBackup() {
   try {
     const dbPath = process.env.LAVANDERY_DB || path.join(__dirname, 'lavandery.db');
     if (!fs.existsSync(dbPath)) return;
@@ -3793,7 +3832,33 @@ function runBackup() {
     fs.copyFileSync(dbPath, dest);
     const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('lavandery-')).sort();
     while (files.length > 30) { try { fs.unlinkSync(path.join(BACKUP_DIR, files.shift())); } catch {} }
-    console.log('[backup] ok:', dest);
+    console.log('[backup] local ok:', dest);
+
+    // Backup externo: tenta Drive → S3 → Firebase (o que estiver configurado)
+    const buf = fs.readFileSync(dest);
+    const filename = `lavandery-${ts}.db`;
+    const gdrive = getIntegration('gdrive');
+    if (gdrive?.folder_id && gdrive?.service_account_json) {
+      try {
+        await driveUpload(gdrive, { name: filename, mimeType: 'application/x-sqlite3', body: buf });
+        console.log('[backup] enviado pro Google Drive'); return;
+      } catch (e) { console.warn('[backup] Drive falhou:', e.message); }
+    }
+    const s3 = getIntegration('s3');
+    if (s3?.bucket && s3?.access_key) {
+      try {
+        await s3PutObject(s3, { key: `backups/${filename}`, body: buf, contentType: 'application/x-sqlite3' });
+        console.log('[backup] enviado pro S3'); return;
+      } catch (e) { console.warn('[backup] S3 falhou:', e.message); }
+    }
+    const firebase = getIntegration('firebase');
+    if (firebase) {
+      try {
+        const { firebaseUpload } = await import('./firebase.js');
+        await firebaseUpload(firebase, { key: `backups/${filename}`, body: buf, contentType: 'application/x-sqlite3' });
+        console.log('[backup] enviado pro Firebase'); return;
+      } catch (e) { console.warn('[backup] Firebase falhou:', e.message); }
+    }
   } catch (e) { console.error('[backup] falhou:', e.message); }
 }
 setTimeout(runBackup, 30000);

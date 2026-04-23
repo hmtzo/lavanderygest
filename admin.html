@@ -611,10 +611,12 @@
       <h1>Repasses</h1>
       <p>Lance os ciclos mensais de cada condomínio, calcula automático e gera relatório PDF.</p>
     </div>
-    <div style="display:flex;gap:10px;align-items:center">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <label style="font-size:12px;color:var(--ink-600)">Mês</label>
       <input id="rpPageMonth" type="month" class="input" style="height:38px;width:180px"/>
       <button id="rpPageReport" class="btn-new ghost">📄 Relatório do mês</button>
+      <input type="file" id="rpPageXls" accept=".xls,.xlsx,.html" style="display:none"/>
+      <button id="rpPageUpload" class="btn-new brand" title="Importar extrato de uso do cartão (XLS)">📤 Importar XLS do cartão</button>
     </div>
   </div>
 
@@ -3453,6 +3455,79 @@ document.querySelector('#rpPageReport')?.addEventListener('click', async () => {
   if (!month) return;
   window.open('/api/repasses/report.pdf?month=' + month, '_blank');
 });
+
+// Importar extrato do cartão (HTML disfarçado de .xls) — preenche lavagens/secagens auto
+document.querySelector('#rpPageUpload')?.addEventListener('click', () => document.querySelector('#rpPageXls').click());
+document.querySelector('#rpPageXls')?.addEventListener('change', async (e) => {
+  const f = e.target.files?.[0]; if (!f) return;
+  Toast.message({ body: `Lendo ${f.name}...` });
+  try {
+    const sniff = await f.slice(0, 300).text().catch(() => '');
+    let rows;
+    if (/<html|<table|ng-repeat|MACHINE_UTILIZATION|Uso de M[áa]quina/i.test(sniff)) {
+      rows = parseHtmlCartao(await f.text());
+    } else {
+      if (!window.XLSX) await new Promise(r => { const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload=r; document.head.appendChild(s); });
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+    }
+    if (!rows.length) { Toast.warning('Nenhum dado encontrado'); return; }
+    // Se o parser HTML detectou o mês, atualiza o seletor
+    if (rows[0]?.mes) document.querySelector('#rpPageMonth').value = rows[0].mes;
+    // Faz matching fuzzy e preenche os rows visíveis
+    const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    const matchMap = {};
+    for (const row of rows) {
+      const target = norm(row.condominio || row.condo || row.nome || '');
+      if (!target) continue;
+      let bestId = null, bestScore = 0;
+      for (const c of _rpPageCondos) {
+        const src = norm(c.contract_name || c.name);
+        if (!src) continue;
+        if (target.includes(src) || src.includes(target)) {
+          const sc = Math.min(src.length, target.length) / Math.max(src.length, target.length);
+          if (sc > bestScore) { bestScore = sc; bestId = c.id; }
+        }
+      }
+      if (bestId && bestScore > 0.4) matchMap[bestId] = row;
+    }
+    let filled = 0;
+    document.querySelectorAll('.rpp-row').forEach(tr => {
+      const r = matchMap[tr.dataset.id];
+      if (!r) return;
+      const w = parseInt(r.lavagens || r.lavagem || r.washes || 0) || 0;
+      const d = parseInt(r.secagens || r.secagem || r.dries || 0) || 0;
+      tr.querySelector('.rpp-w').value = w;
+      tr.querySelector('.rpp-d').value = d;
+      tr.querySelector('.rpp-w').dispatchEvent(new Event('input'));
+      filled++;
+    });
+    Toast.success(`${filled}/${rows.length} condomínios preenchidos · clique em "Salvar todos"`);
+  } catch (err) {
+    Toast.error('Erro: ' + err.message);
+  }
+  e.target.value = '';
+});
+function parseHtmlCartao(html) {
+  const per = html.match(/De:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*At[eé]:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+  let month = null;
+  if (per) { const [d,m,y] = per[2].split('/'); month = `${y.length===2?'20'+y:y}-${m.padStart(2,'0')}`; }
+  const pdvRe = /<h4 class="ng-binding">([^<]+)<\/h4>\s*<h5[^>]*>[^<]*<span[^>]*>Total Geral do Ponto de Venda[^<]*<\/span>[^<]*?([\d.,]+)/g;
+  const list = []; let m;
+  while ((m = pdvRe.exec(html))) list.push({ name: m[1].trim(), start: m.index });
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const end = i+1 < list.length ? list[i+1].start : html.length;
+    const sec = html.slice(list[i].start, end);
+    const w = (sec.match(/>\s*LAVADORA[^<]*</g) || []).length;
+    const d = (sec.match(/>\s*SECADORA[^<]*</g) || []).length;
+    const nome = list[i].name.replace(/^LAVANDERY\s*[-–]\s*/i,'').replace(/^COND\.?\s+/i,'Condomínio ').trim();
+    out.push({ condominio: nome, mes: month, lavagens: w, secagens: d });
+  }
+  return out;
+}
 
 async function loadIntegrations() {
   // Load masked previews; inputs are empty (don't pre-fill secrets)
