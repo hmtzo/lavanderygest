@@ -1,5 +1,12 @@
 // PDFs gerados server-side — 3 templates brandados Lavandery
 import { jsPDF } from 'jspdf';
+import { getLogo } from './logo-helper.js';
+
+// Cache do logo em data URL (pré-carregado ao importar o módulo)
+let _logoReady = null;
+(async () => { try { _logoReady = await getLogo(); } catch {} })();
+export function setLogo(logo) { _logoReady = logo; }
+export async function preloadLogo() { _logoReady = await getLogo(); return _logoReady; }
 
 const BRAND = [83,60,157];      // #533C9D
 const BRAND2 = [101,74,186];    // #654ABA
@@ -16,19 +23,26 @@ function fmtDate(d) { return d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 function header(doc, subtitle) {
   const W = doc.internal.pageSize.getWidth();
   doc.setFillColor(...BRAND); doc.rect(0, 0, W, 110, 'F');
-  // Purple glow
   doc.setFillColor(...BRAND2); doc.circle(W-60, 40, 90, 'F');
-  // Logo circle
+  // Logo image (PNG branco renderizado da logo.svg) ou fallback
+  if (_logoReady?.dataUrlWhite) {
+    try { doc.addImage(_logoReady.dataUrlWhite, 'PNG', 40, 28, 120, 44); }
+    catch { drawTextLogo(doc); }
+  } else {
+    drawTextLogo(doc);
+  }
+  // Subtítulo
+  doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(255,255,255);
+  doc.text(subtitle, 40, 100);
+}
+function drawTextLogo(doc) {
   doc.setFillColor(255,255,255); doc.roundedRect(40, 32, 40, 40, 8, 8, 'F');
   doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor(...BRAND);
   doc.text('L', 60, 60, { align:'center' });
-  // Texts
   doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
   doc.text('LAVANDERY', 96, 52);
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...LIGHT);
   doc.text('Lavanderia compartilhada inteligente', 96, 64);
-  doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(255,255,255);
-  doc.text(subtitle, 40, 100);
 }
 
 function footer(doc, id, pageNum, totalPages) {
@@ -170,10 +184,20 @@ export function generateEquipmentDeliveryTerm(d) {
 
   // Cabeçalho Lavandery (barra roxa com logo)
   doc.setFillColor(...BRAND); doc.rect(0, 0, W, 70, 'F');
-  doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(20);
-  doc.text('LAVANDERY', margin, 40);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10);
-  doc.text('Inova Tecnologia e Serviços e Representação Ltda.', margin, 56);
+  if (_logoReady?.dataUrlWhite) {
+    try { doc.addImage(_logoReady.dataUrlWhite, 'PNG', margin, 20, 140, 36); }
+    catch {
+      doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(20);
+      doc.text('LAVANDERY', margin, 40);
+      doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      doc.text('Inova Tecnologia e Serviços e Representação Ltda.', margin, 56);
+    }
+  } else {
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(20);
+    doc.text('LAVANDERY', margin, 40);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.text('Inova Tecnologia e Serviços e Representação Ltda.', margin, 56);
+  }
 
   // Título centralizado
   let y = 110;

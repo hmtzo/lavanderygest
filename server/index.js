@@ -2137,6 +2137,8 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
 
   try {
     const { jsPDF } = await import('jspdf');
+    const { getLogo } = await import('./logo-helper.js');
+    const logo = await getLogo().catch(() => null);
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const W = 595, H = 842, pad = 40;
     const money = n => 'R$ ' + (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2145,6 +2147,15 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     const [y, mo] = month.split('-');
     const mesNome = meses[parseInt(mo,10)-1];
     const prevMesNome = prev ? meses[parseInt(prevMonth.split('-')[1],10)-1] : null;
+    // Helper pra colocar logo em cabeçalhos
+    function drawLogo(x, yy, w = 120, h = 38) {
+      if (logo?.dataUrlWhite) {
+        try { doc.addImage(logo.dataUrlWhite, 'PNG', x, yy, w, h); return; } catch {}
+      }
+      // fallback: texto
+      doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(24);
+      doc.text('LAVANDERY', x, yy + 26);
+    }
 
     // ========== PALETA ==========
     const BRAND = [83, 60, 157];       // Roxo primário
@@ -2168,12 +2179,11 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     doc.setFillColor(...BRAND_LIGHT); doc.circle(W-60, 120, 140, 'F');
     doc.setFillColor(...BRAND); doc.circle(W-60, 120, 140, 'F');
 
-    // LAVANDERY logo text
-    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(28);
-    doc.text('LAVANDERY', 50, 80);
+    // LAVANDERY logo (SVG renderizado em PNG branco)
+    drawLogo(50, 50, 180, 56);
     doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
     doc.setTextColor(200, 190, 230);
-    doc.text('LAVANDERIA COMPARTILHADA INTELIGENTE', 50, 98);
+    doc.text('LAVANDERIA COMPARTILHADA INTELIGENTE', 50, 128);
 
     // Título principal
     doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(36);
@@ -2249,9 +2259,8 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     doc.setFillColor(...GRAY_50); doc.rect(0, 0, W, H, 'F');
     // Header suave
     doc.setFillColor(...BRAND); doc.rect(0, 0, W, 70, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
-    doc.text('LAVANDERY', 40, 35);
-    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    drawLogo(40, 18, 110, 36);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(255);
     doc.text(`${mesNome} / ${y}`, W-40, 35, { align: 'right' });
     doc.setFontSize(9); doc.setTextColor(220, 215, 240);
     doc.text((condo.name||'').toUpperCase(), 40, 54);
@@ -2421,9 +2430,8 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     doc.addPage();
     doc.setFillColor(...GRAY_50); doc.rect(0, 0, W, H, 'F');
     doc.setFillColor(...BRAND); doc.rect(0, 0, W, 70, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
-    doc.text('LAVANDERY', 40, 35);
-    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    drawLogo(40, 18, 110, 36);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(255);
     doc.text(`${mesNome} / ${y}`, W-40, 35, { align: 'right' });
     doc.setFontSize(9); doc.setTextColor(220, 215, 240);
     doc.text((condo.name||'').toUpperCase(), 40, 54);
@@ -2501,9 +2509,8 @@ app.get('/api/condominiums/:id/monthly-report.pdf', async (req, res) => {
     doc.addPage();
     doc.setFillColor(...GRAY_50); doc.rect(0, 0, W, H, 'F');
     doc.setFillColor(...BRAND); doc.rect(0, 0, W, 70, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
-    doc.text('LAVANDERY', 40, 35);
-    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    drawLogo(40, 18, 110, 36);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(255);
     doc.text(`${mesNome} / ${y}`, W-40, 35, { align: 'right' });
     doc.setFontSize(9); doc.setTextColor(220, 215, 240);
     doc.text((condo.name||'').toUpperCase(), 40, 54);
