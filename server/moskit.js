@@ -35,18 +35,30 @@ export async function moskitTest(cfg) {
 }
 
 // Helper genérico: busca todos os registros paginando até acabar
+// Moskit v2 usa page=1,2,3... (1-indexed)
 async function fetchAllPaginated(cfg, endpoint, pageSize = 100) {
   const all = [];
-  let offset = 0;
-  const MAX_PAGES = 200; // proteção contra loop infinito
-  for (let p = 0; p < MAX_PAGES; p++) {
+  const seenIds = new Set();
+  const MAX_PAGES = 500;
+  for (let page = 1; page <= MAX_PAGES; page++) {
     const sep = endpoint.includes('?') ? '&' : '?';
-    const page = await moskitFetch(cfg, `${endpoint}${sep}limit=${pageSize}&offset=${offset}`);
-    if (!Array.isArray(page) || page.length === 0) break;
-    all.push(...page);
-    if (page.length < pageSize) break;
-    offset += pageSize;
-    await new Promise(r => setTimeout(r, 120)); // respeita rate limit
+    let pageResult;
+    try {
+      pageResult = await moskitFetch(cfg, `${endpoint}${sep}page=${page}&limit=${pageSize}`);
+    } catch { break; }
+    if (!Array.isArray(pageResult) || pageResult.length === 0) break;
+    let added = 0;
+    for (const item of pageResult) {
+      const id = item.id || item.hash || JSON.stringify(item).slice(0, 40);
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      all.push(item);
+      added++;
+    }
+    // Se página retornou só dados já vistos, acabou
+    if (added === 0) break;
+    if (pageResult.length < pageSize) break;
+    await new Promise(r => setTimeout(r, 150));
   }
   return all;
 }
