@@ -34,9 +34,27 @@ export async function moskitTest(cfg) {
   }
 }
 
-// Lista empresas (companies)
-export async function moskitListCompanies(cfg, { limit = 100, offset = 0 } = {}) {
-  return moskitFetch(cfg, `/companies?limit=${limit}&offset=${offset}`);
+// Helper genérico: busca todos os registros paginando até acabar
+async function fetchAllPaginated(cfg, endpoint, pageSize = 100) {
+  const all = [];
+  let offset = 0;
+  const MAX_PAGES = 200; // proteção contra loop infinito
+  for (let p = 0; p < MAX_PAGES; p++) {
+    const sep = endpoint.includes('?') ? '&' : '?';
+    const page = await moskitFetch(cfg, `${endpoint}${sep}limit=${pageSize}&offset=${offset}`);
+    if (!Array.isArray(page) || page.length === 0) break;
+    all.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+    await new Promise(r => setTimeout(r, 120)); // respeita rate limit
+  }
+  return all;
+}
+
+// Lista empresas (companies) — paginado
+export async function moskitListCompanies(cfg, opts = {}) {
+  if (opts.noAll) return moskitFetch(cfg, `/companies?limit=${opts.limit||100}&offset=${opts.offset||0}`);
+  return fetchAllPaginated(cfg, '/companies');
 }
 
 // Busca empresa por CNPJ ou nome
@@ -118,19 +136,22 @@ export async function moskitListPipelines(cfg) {
   return moskitFetch(cfg, '/pipelines');
 }
 
-// Lista deals
-export async function moskitListDeals(cfg, { limit = 100, offset = 0 } = {}) {
-  return moskitFetch(cfg, `/deals?limit=${limit}&offset=${offset}`);
+// Lista deals — paginado
+export async function moskitListDeals(cfg, opts = {}) {
+  if (opts.noAll) return moskitFetch(cfg, `/deals?limit=${opts.limit||100}&offset=${opts.offset||0}`);
+  return fetchAllPaginated(cfg, '/deals');
 }
 
-// Lista contatos
-export async function moskitListContacts(cfg, { limit = 100, offset = 0 } = {}) {
-  return moskitFetch(cfg, `/contacts?limit=${limit}&offset=${offset}`);
+// Lista contatos — paginado
+export async function moskitListContacts(cfg, opts = {}) {
+  if (opts.noAll) return moskitFetch(cfg, `/contacts?limit=${opts.limit||100}&offset=${opts.offset||0}`);
+  return fetchAllPaginated(cfg, '/contacts');
 }
 
-// Lista atividades
-export async function moskitListActivities(cfg, { limit = 100, offset = 0 } = {}) {
-  return moskitFetch(cfg, `/activities?limit=${limit}&offset=${offset}`);
+// Lista atividades — paginado
+export async function moskitListActivities(cfg, opts = {}) {
+  if (opts.noAll) return moskitFetch(cfg, `/activities?limit=${opts.limit||100}&offset=${opts.offset||0}`);
+  return fetchAllPaginated(cfg, '/activities');
 }
 
 // Lista usuários
