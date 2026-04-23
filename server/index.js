@@ -4157,12 +4157,12 @@ app.get('/api/moskit/debug-pagination', async (req, res) => {
   const endpoint = req.query.endpoint || '/companies';
   const out = [];
   for (const testUrl of [
-    `${endpoint}?page=1&limit=100`,
-    `${endpoint}?page=2&limit=100`,
-    `${endpoint}?offset=0&limit=100`,
-    `${endpoint}?offset=10&limit=10`,
-    `${endpoint}?limit=50`,
-    `${endpoint}`,
+    `/companies/search?pageSize=100`,
+    `/companies/search?pageToken=&pageSize=50`,
+    `${endpoint}?pageToken=AAAA`,
+    `${endpoint}/search?limit=100`,
+    `/search/companies?q=&limit=100`,
+    `${endpoint}?maxResults=100`,
   ]) {
     try {
       const r = await fetch(`https://api.moskitcrm.com/v2${testUrl}`, { headers: { 'apikey': cfg.api_key, 'Accept': 'application/json' } });
