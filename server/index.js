@@ -4149,6 +4149,42 @@ app.post('/api/integrations/moskit/test', async (_req, res) => {
   res.json(r);
 });
 
+// DEBUG 2: testa POST /search com bodies variados
+app.get('/api/moskit/debug-search-body', async (req, res) => {
+  if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
+  const cfg = getIntegration('moskit');
+  if (!cfg?.api_key) return res.status(400).json({ error:'no_api_key' });
+  const bodies = [
+    {},
+    { pageSize: 100 },
+    { size: 100 },
+    { limit: 100 },
+    { maxResults: 100 },
+    { start: 0, limit: 100 },
+    { from: 0, size: 100 },
+    { pagination: { page: 1, size: 100 } },
+    { filters: [], pageSize: 100 },
+    { query: '', pageSize: 100 },
+  ];
+  const out = [];
+  for (const b of bodies) {
+    try {
+      const r = await fetch('https://api.moskitcrm.com/v2/companies/search', {
+        method: 'POST',
+        headers: { 'apikey': cfg.api_key, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(b),
+      });
+      const text = await r.text();
+      let parsed; try { parsed = JSON.parse(text); } catch { parsed = text.slice(0,100); }
+      const items = Array.isArray(parsed) ? parsed : (parsed?.data || parsed?.items || []);
+      const isSchema = Array.isArray(items) && items[0]?.key && items[0]?.type;
+      out.push({ body: b, status: r.status, count: items.length, isSchema, firstId: items[0]?.id, keys: Array.isArray(items) && items[0] ? Object.keys(items[0]).slice(0,5) : null, topKeys: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed) : null });
+    } catch (e) { out.push({ body: b, error: String(e.message||e) }); }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  res.json(out);
+});
+
 // DEBUG: testa paginação real da API do Moskit
 app.get('/api/moskit/debug-pagination', async (req, res) => {
   if (!req.user || !['admin','gestor'].includes(req.user.role)) return res.status(403).json({ error:'forbidden' });
