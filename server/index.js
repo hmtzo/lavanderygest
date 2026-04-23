@@ -4178,7 +4178,7 @@ app.get('/api/moskit/debug-search-body', async (req, res) => {
       let parsed; try { parsed = JSON.parse(text); } catch { parsed = text.slice(0,100); }
       const items = Array.isArray(parsed) ? parsed : (parsed?.data || parsed?.items || []);
       const isSchema = Array.isArray(items) && items[0]?.key && items[0]?.type;
-      out.push({ body: b, status: r.status, count: items.length, isSchema, firstId: items[0]?.id, keys: Array.isArray(items) && items[0] ? Object.keys(items[0]).slice(0,5) : null, topKeys: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed) : null });
+      out.push({ body: b, status: r.status, count: items.length, isSchema, firstId: items[0]?.id, keys: Array.isArray(items) && items[0] ? Object.keys(items[0]).slice(0,5) : null, topKeys: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed) : null, errorDetail: parsed?.detail || parsed?.message || parsed?.title });
     } catch (e) { out.push({ body: b, error: String(e.message||e) }); }
     await new Promise(r => setTimeout(r, 200));
   }
