@@ -48,6 +48,24 @@ docker compose up -d
 # Nginx + Let's Encrypt pra HTTPS
 ```
 
+## 📱 App do técnico num arquivo só (`tecnico.html`)
+
+`tecnico.html` é o app do técnico inteiro — as 6 etapas da vistoria, fotos, assinatura, PDF e fila offline — num único HTML, com CSS, JS e logo embutidos. Serve pra hospedar solto, mandar por e-mail ou abrir direto do celular.
+
+```bash
+node tools/build-tecnico.mjs   # regere depois de mexer em app.js / styles.css
+```
+
+Como ele acha a API:
+
+| Situação | O que acontece |
+|---|---|
+| Servido pelo próprio servidor (`/tecnico.html`) | Usa a API da mesma origem. Login e sincronização normais. |
+| Hospedado em outro lugar | Abra uma vez com `?api=https://seu-servidor` — fica salvo no navegador. |
+| Aberto direto do disco (`file://`) ou com `?demo=1` | Modo demonstração: login local contra os técnicos de exemplo (senha = PIN `1234`), sem servidor. Mostra o selo **MODO DEMONSTRAÇÃO**. |
+
+O modo demonstração só liga nesses dois casos — servido por HTTP sem `?demo=1`, a autenticação continua sendo a da API.
+
 ## 🔐 Autenticação
 
 - Login em `/login.html` (e-mail + senha)
